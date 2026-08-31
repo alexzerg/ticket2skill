@@ -134,7 +134,7 @@ def load_tickets() -> list[JenkinsTicket]:
             resolutions = config["resolutions"]
             tickets.append(
                 JenkinsTicket(
-                    id=f"JENKINS-{sequence:04d}",
+                    id=f"OPS-{1000 + sequence}",
                     resolved_at=resolved_at.isoformat(),
                     era=era,
                     architecture=str(config["architecture"]),

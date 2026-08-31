@@ -12,13 +12,18 @@ from fastapi.staticfiles import StaticFiles
 
 from app.agents import LOCATION, MODEL, PROJECT, TemporalAgents
 from app.data import CURRENT_INCIDENT, NEXT_DRIFT_EVENT, load_tickets, migration_events
-from app.models import TemporalSkill
+from app.models import TemporalSkill, TimelineAnalysis
 from app.registry import artifact_path, publish_drift_update, publish_temporal_skill
 from app.replay import evaluate_current_skill, evaluate_drift_update
 
-app = FastAPI(title="Runbook Drift", version="0.7.0")
+app = FastAPI(title="Runbook Drift", version="0.8.0")
 state_lock = Lock()
-state: dict[str, Any] = {"result": None}
+state: dict[str, Any] = {
+    "jira_connected": False,
+    "tickets_imported": False,
+    "timeline": None,
+    "result": None,
+}
 
 
 @app.get("/api/health")
@@ -29,6 +34,31 @@ def health() -> dict[str, str]:
         "location": LOCATION,
         "model": MODEL,
         "framework": "Google GenAI SDK",
+    }
+
+
+@app.post("/api/jira/check")
+def check_jira() -> dict[str, Any]:
+    """Connect the synthetic Jira source and import the selected resolved issues."""
+
+    tickets = load_tickets()
+    with state_lock:
+        state["jira_connected"] = True
+        state["tickets_imported"] = True
+        state["timeline"] = None
+        state["result"] = None
+    return {
+        "connected": True,
+        "mode": "synthetic-enterprise-demo",
+        "tenant": "Acme Engineering",
+        "endpoint": "https://acme-ops.atlassian.net/rest/api/3/search",
+        "auth": "OAuth 2.0",
+        "project": "OPS",
+        "selected_label": "jenkins",
+        "jql": ('project = OPS AND labels = "jenkins" AND status = Done ORDER BY resolved ASC'),
+        "tickets_loaded": len(tickets),
+        "first_issue": tickets[0].id,
+        "last_issue": tickets[-1].id,
     }
 
 
@@ -65,13 +95,32 @@ def history() -> dict[str, Any]:
     }
 
 
+@app.post("/api/analyze-timeline")
+def analyze_timeline() -> dict[str, Any]:
+    if not state.get("tickets_imported"):
+        raise HTTPException(status_code=409, detail="check Jira and load tickets first")
+    try:
+        timeline = TemporalAgents().analyze_timeline(load_tickets(), migration_events())
+        with state_lock:
+            state["timeline"] = timeline.model_dump()
+            state["result"] = None
+        return {
+            "timeline": timeline.model_dump(),
+            "history": history(),
+        }
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
 @app.post("/api/build-current-skill")
 def build_current_skill() -> dict[str, Any]:
+    stored_timeline = state.get("timeline")
+    if not isinstance(stored_timeline, dict):
+        raise HTTPException(status_code=409, detail="analyze the ticket timeline first")
     try:
-        tickets = load_tickets()
+        timeline = TimelineAnalysis.model_validate(stored_timeline)
         migrations = migration_events()
         agents = TemporalAgents()
-        timeline = agents.analyze_timeline(tickets, migrations)
         skill = agents.compile_skill(timeline, migrations)
         incident = agents.resolve_incident(skill, CURRENT_INCIDENT)
         replay = evaluate_current_skill(skill, incident)
@@ -142,7 +191,12 @@ def simulate_drift() -> dict[str, Any]:
 @app.post("/api/reset")
 def reset() -> dict[str, str]:
     with state_lock:
-        state["result"] = None
+        state.update(
+            jira_connected=False,
+            tickets_imported=False,
+            timeline=None,
+            result=None,
+        )
     return {"status": "RESET"}
 
 

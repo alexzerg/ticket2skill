@@ -27,6 +27,21 @@ That answer is now dangerous. The company subsequently migrated through four era
 
 Historical frequency says “restart the VM.” Temporal context says those VMs no longer exist.
 
+## Synthetic Jira connector
+
+The demo starts with a realistic but explicitly synthetic Jira integration:
+
+```text
+Endpoint: acme-ops.atlassian.net/rest/api/3/search
+Auth: OAuth 2.0
+Project: OPS
+Selected label: jenkins
+JQL: project = OPS AND labels = "jenkins" AND status = Done ORDER BY resolved ASC
+Imported issues: OPS-1001 … OPS-1200
+```
+
+The user first checks the connector and imports 200 resolved issues, then asks Gemini to discover the temporal architecture eras. No real Jira tenant, credentials, or corporate data are used.
+
 ## Demo incident
 
 ```text
