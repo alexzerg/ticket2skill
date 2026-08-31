@@ -4,9 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ticket2skill"
-version = "0.2.0"
+version = "0.3.0"
 description = "Turn resolved enterprise tickets into tested, versioned agent skills"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.116,<1",
   "google-cloud-firestore>=2.21,<3",
@@ -30,13 +30,13 @@ packages = ["app"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 packages = ["app"]
 
