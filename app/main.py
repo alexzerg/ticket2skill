@@ -31,7 +31,7 @@ from app.registry import artifact_path, publish_drift_update, publish_temporal_s
 from app.replay import evaluate_current_skill, evaluate_drift_update
 from app.routing import route_controller
 
-app = FastAPI(title="Runbook Drift", version="0.11.1")
+app = FastAPI(title="Runbook Drift", version="0.11.2")
 state_lock = Lock()
 state: dict[str, Any] = {
     "jira_connected": False,
