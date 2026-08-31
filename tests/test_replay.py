@@ -132,7 +132,10 @@ def test_drift_update_retires_old_identity_annotation() -> None:
             SkillStep(id="jcasc", tool="jcasc.validate", instruction="Validate JCasC."),
             SkillStep(id="diff", tool="argocd.diff", instruction="Inspect Argo CD diff."),
         ],
-        jcasc_patch="serviceAccount: ci-build-agent\n",
+        jcasc_patch=(
+            "jenkins:\n  clouds:\n    - kubernetes:\n        templates:\n"
+            "          - name: jenkins-agent\n            serviceAccount: ci-build-agent\n"
+        ),
     )
     report = evaluate_drift_update(update)
     assert report.score == 100

@@ -61,6 +61,20 @@ Inspect ephemeral agent pods and Workload Identity, update the JCasC pod templat
 pull request, validate the configuration, inspect Argo CD diff, and sync after approval.
 ```
 
+## Try the interactive Skill Router
+
+After building `jenkins-current-recovery:v4`, the demo reveals **Test on a new incident** and its stale-vs-current comparison. Then use **Test the generated Skill Router**:
+
+| Input | Expected route |
+|---|---|
+| `jenkins-paris` | `CONTROLLED EXCEPTION` — scoped Compute Engine VM actions |
+| `jenkins-barcelona` | `CONTROLLED EXCEPTION` — scoped Compute Engine VM actions |
+| `jenkins-NYC` | `CONTROLLED EXCEPTION` — scoped Compute Engine VM actions |
+| `jenkins-london` | `CURRENT DEFAULT` — GKE/JCasC/GitOps workflow |
+| `jenkins-nyc` | `CURRENT DEFAULT` — exact matching is case-sensitive |
+
+The decision is made by `POST /api/route-incident` from the published skill stored in server state, not by frontend hardcoding.
+
 ## Agent pipeline
 
 1. Timeline Miner reads all 200 tickets, timestamps, tools, resolutions, and architecture labels.
@@ -69,12 +83,23 @@ pull request, validate the configuration, inspect Argo CD diff, and sync after a
 4. Deterministic temporal replay checks that retired actions cannot re-enter the workflow.
 5. Current-Era Incident Resolver generates a valid JCasC patch for the new incident.
 6. Registry Publisher writes the timeline, skill, patch, and replay evidence to Firestore.
-7. A downloadable ZIP becomes the current Jenkins recovery artifact.
+7. A self-contained `SKILL.md` becomes the primary artifact; the ZIP remains an optional evidence bundle.
 
 ## Tangible result
 
+Primary download:
+
+```text
+jenkins-current-recovery-v4.md
+```
+
+The single file contains metadata, routing policy, current workflow, exact legacy exceptions,
+deprecated actions, JCasC patch, success criteria, and replay provenance. An optional evidence bundle
+contains:
+
 ```text
 jenkins-current-recovery-v4/
+├── SKILL.md
 ├── skill.yaml
 ├── timeline.json
 ├── deprecated-actions.json
@@ -107,7 +132,7 @@ Pub/Sub architecture event
 → v5 published to Firestore as CURRENT
 ```
 
-The GKE identity change does not affect the three VM-era exceptions, so the exact allowlist is carried from v4 into v5 and replayed as an invariant. This turns a one-time history import into a continuous skill lifecycle.
+The GKE identity change does not affect the three VM-era exceptions, so the exact allowlist is carried from v4 into v5 and replayed as an invariant. This turns a one-time history import into a continuous skill lifecycle. v4 is never overwritten: its immutable publication is marked `STALE`, v5 receives a new registry ID, and the `current` pointer, router, workflow, patch, and primary download all switch to v5.
 
 ## Why it is different
 

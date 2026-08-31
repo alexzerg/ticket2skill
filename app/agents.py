@@ -118,7 +118,9 @@ other Jenkins recovery is GitOps-managed on GKE and agents use Workload Identity
 The current recommendation must update the JCasC Kubernetes agent pod template through a Git pull
 request, validate the configuration, inspect Argo CD diff, and sync after approval.
 Generate a concise valid YAML JCasC patch that sets serviceAccount: jenkins-agent and references the
-Google service account annotation iam.gke.io/gcp-service-account.
+Google service account annotation iam.gke.io/gcp-service-account. Use the explicit variable
+`${{GCP_PROJECT_ID}}` in the Google service account email; never emit `gcp-project` or another fake
+project identifier.
 
 Current temporal skill:
 {skill.model_dump_json()}
@@ -146,8 +148,11 @@ Workload Identity Federation principal binding, change the Kubernetes service ac
 ci-build-agent through a Git pull request, validate JCasC, validate the Terraform IAM change,
 inspect Argo CD diff, and sync only after approval.
 
-The new JCasC patch must set serviceAccount: ci-build-agent and must not contain the retired
-Google-service-account annotation. Copy all three skill.legacy_exceptions into
+Set current_architecture exactly to "Argo CD managed JCasC with ephemeral GKE agents and direct
+Workload Identity Federation principal binding". The new JCasC patch must use the valid path
+jenkins.clouds[].kubernetes.templates[], set serviceAccount: ci-build-agent, and contain no
+annotations block or retired Google-service-account annotation. Copy all three
+skill.legacy_exceptions into
 preserved_legacy_exceptions unchanged: the identity migration affects the GKE fleet, not the three
 explicit VM-era controllers.
 

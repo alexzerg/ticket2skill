@@ -9,7 +9,9 @@ flowchart LR
     E --> S[Temporal Skill Compiler\nGemini 3.5]
     X --> S
     S --> R[Deterministic temporal replay]
-    R --> I[Current-Era Incident Resolver]
+    R --> Q[Interactive Skill Router]
+    Q --> V[Exact legacy VM route]
+    Q --> I[Current-Era Incident Resolver]
     I --> P[JCasC GitOps patch]
     R --> F[(Firestore temporal registry)]
     P --> F
@@ -26,10 +28,13 @@ flowchart LR
 
 A high-frequency old action cannot override an explicit migration event. A migration event may retain a bounded exception, but only as an exact allowlist. The current demo retains `jenkins-paris`, `jenkins-barcelona`, and `jenkins-NYC`; no wildcard VM route exists.
 
+Skill versions are immutable artifacts. A drift event marks the previous publication stale, creates and replays a complete new version, updates the Firestore current pointer, and switches downloads and routing only after both drift replay and full-skill replay pass.
+
 ## Agents
 
 - **Timeline Miner:** detects operational eras from timestamps, tools, resolutions, and architecture evidence.
 - **Temporal Skill Compiler:** creates the current workflow, converts retired actions into negative constraints, and preserves exact legacy exceptions.
+- **Interactive Skill Router:** performs a case-sensitive exact match against the published skill allowlist and exposes the decision through `POST /api/route-incident`.
 - **Current-Era Incident Resolver:** routes an exact allowlisted controller to its scoped VM runbook; every other incident uses current tools and produces a JCasC patch.
 
 ## Deterministic publication gate

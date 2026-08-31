@@ -63,6 +63,8 @@ class SkillStep(BaseModel):
 class TemporalSkill(BaseModel):
     name: Literal["jenkins-current-recovery"]
     version: Literal["v4", "v5"]
+    supersedes: Literal["v4"] | None = None
+    architecture_event: str | None = None
     current_era: Literal["ephemeral"]
     current_architecture: str
     source_ticket_count: int
@@ -82,6 +84,22 @@ class IncidentAnalysis(BaseModel):
     jcasc_patch: str
 
 
+class ControllerRouteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    controller: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
+
+
+class ControllerRouteDecision(BaseModel):
+    controller: str
+    route: Literal["legacy_vm_exception", "current_gke_gitops"]
+    status: Literal["CONTROLLED_EXCEPTION", "CURRENT_DEFAULT"]
+    exact_match: bool
+    architecture: str
+    reason: str
+    actions: list[str] = Field(min_length=2)
+
+
 class TemporalReplayReport(BaseModel):
     score: int
     checks: dict[str, bool]
@@ -92,6 +110,7 @@ class PublishedTemporalSkill(BaseModel):
     registry_id: str
     firestore_path: str
     artifact_url: str
+    evidence_bundle_url: str
     source_ticket_count: int
     current_era: str
     replay_score: int

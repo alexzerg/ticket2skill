@@ -146,9 +146,7 @@ def legacy_exceptions() -> list[LegacyException]:
             controller="jenkins-paris",
             era="vm",
             architecture=architecture,
-            routing_condition=(
-                "Use only when the incident target exactly matches jenkins-paris."
-            ),
+            routing_condition=("Use only when the incident target exactly matches jenkins-paris."),
             allowed_actions=allowed_actions,
         ),
         LegacyException(

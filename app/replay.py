@@ -36,6 +36,12 @@ def evaluate_current_skill(
         f"{incident.current_recommendation} {' '.join(incident.planned_tool_trace)}"
     ).lower()
     patch = incident.jcasc_patch.lower()
+    expected_service_account = "jenkins-agent" if skill.version == "v4" else "ci-build-agent"
+    identity_configuration_valid = (
+        "iam.gke.io/gcp-service-account" in patch
+        if skill.version == "v4"
+        else "iam.gke.io/gcp-service-account" not in patch and "principal" in workflow
+    )
     legacy_names = {exception.controller for exception in skill.legacy_exceptions}
     checks = {
         "current_ephemeral_era": skill.current_era == "ephemeral",
@@ -51,9 +57,9 @@ def evaluate_current_skill(
         "vm_restart_deprecated": "ssh" in deprecated and "systemctl" in deprecated,
         "direct_helm_deprecated": "helm" in deprecated,
         "jcasc_patch_service_account": bool(
-            re.search(r"serviceaccount:\s*['\"]?jenkins-agent", patch)
+            re.search(rf"serviceaccount:\s*\S*{expected_service_account}", patch)
         ),
-        "workload_identity_annotation": "iam.gke.io/gcp-service-account" in patch,
+        "workload_identity_configuration": identity_configuration_valid,
         "stale_majority_rejected": "obsolete" in incident.stale_reason.lower()
         or "retired" in incident.stale_reason.lower(),
     }
@@ -83,6 +89,13 @@ def evaluate_drift_update(update: DriftUpdate) -> TemporalReplayReport:
         "jcasc_validated": "jcasc" in workflow,
         "argocd_diff_before_sync": "argocd" in workflow and "diff" in workflow,
         "new_service_account": bool(re.search(r"serviceaccount:\s*['\"]?ci-build-agent", patch)),
+        "valid_jcasc_structure": all(
+            token in patch for token in ("jenkins:", "clouds:", "kubernetes:", "templates:")
+        ),
+        "direct_federation_architecture": all(
+            token in update.current_architecture.lower()
+            for token in ("direct", "workload identity", "principal")
+        ),
         "old_annotation_removed": "iam.gke.io/gcp-service-account" not in patch,
     }
     score = round(sum(checks.values()) / len(checks) * 100)
