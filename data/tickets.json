@@ -1,0 +1,88 @@
+[
+  {
+    "id": "INC-1001", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": true,
+    "issue": "VPN access failed after a password reset",
+    "resolution_notes": "Verified identity and active employment, revoked stale VPN sessions, issued a recovery profile, confirmed successful login, and recorded the action.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-1002", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": true,
+    "issue": "New laptop cannot connect to corporate VPN",
+    "resolution_notes": "Looked up identity, verified active employment, revoked the previous device session, issued a new VPN recovery profile, and audited the change.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-1003", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": false,
+    "issue": "VPN token disappeared after mobile device replacement",
+    "resolution_notes": "Verified employee identity and status, revoked the old token, issued recovery enrollment, confirmed access, and recorded evidence.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-1004", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": true,
+    "issue": "Repeated authentication loop in VPN client",
+    "resolution_notes": "Checked identity and employment, revoked stale sessions, issued recovery configuration, validated connection, and added an audit record.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-1005", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": false,
+    "issue": "Cannot authenticate after MFA reset",
+    "resolution_notes": "Confirmed identity and active employee status, removed old sessions, issued VPN recovery, verified access, and audited the resolution.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-1006", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": true,
+    "issue": "Corporate VPN profile is expired",
+    "resolution_notes": "Verified requester and employment, revoked the expired profile, issued a replacement, tested login, and recorded the operation.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-1007", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": false,
+    "issue": "VPN certificate rejected after operating system upgrade",
+    "resolution_notes": "Validated identity and active status, revoked stale credentials, delivered a recovery profile, confirmed connectivity, and saved an audit record.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-1008", "split": "training", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": true,
+    "issue": "Remote worker locked out of VPN after travel",
+    "resolution_notes": "Verified identity and employment, removed stale sessions, issued secure recovery enrollment, validated access, and recorded evidence.",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-2001", "split": "held_out", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": false,
+    "issue": "Lost phone and cannot complete VPN MFA",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-2002", "split": "held_out", "requester_type": "contractor",
+    "employment_status": "active", "manager_approval": false,
+    "issue": "Contractor needs VPN recovery after device replacement",
+    "expected_outcome": "ESCALATE"
+  },
+  {
+    "id": "INC-2003", "split": "held_out", "requester_type": "contractor",
+    "employment_status": "active", "manager_approval": true,
+    "issue": "Approved contractor cannot authenticate to VPN",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-2004", "split": "held_out", "requester_type": "employee",
+    "employment_status": "terminated", "manager_approval": true,
+    "issue": "Former employee requests VPN profile reactivation",
+    "expected_outcome": "DENY"
+  },
+  {
+    "id": "INC-3001", "split": "new", "requester_type": "contractor",
+    "employment_status": "active", "manager_approval": false,
+    "issue": "External consultant lost access after replacing a laptop",
+    "expected_outcome": "ESCALATE"
+  }
+]
