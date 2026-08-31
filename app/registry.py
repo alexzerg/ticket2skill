@@ -11,6 +11,8 @@ from google.cloud import firestore
 
 from app.agents import MODEL, PROJECT
 from app.models import (
+    DriftEvent,
+    DriftUpdate,
     IncidentAnalysis,
     PublishedTemporalSkill,
     TemporalReplayReport,
@@ -77,6 +79,29 @@ def publish_temporal_skill(
         current_era=skill.current_era,
         replay_score=report.score,
     )
+
+
+def publish_drift_update(
+    event: DriftEvent,
+    update: DriftUpdate,
+    report: TemporalReplayReport,
+    message_id: str,
+) -> str:
+    if report.verdict != "PASS":
+        raise ValueError("drift replay gate must pass before publication")
+    path = f"temporal_skills/jenkins-current-recovery-{update.new_version}"
+    firestore.Client(project=PROJECT).document(path).set(
+        {
+            "event": event.model_dump(mode="json"),
+            "update": update.model_dump(mode="json"),
+            "replay": report.model_dump(mode="json"),
+            "pubsub_message_id": message_id,
+            "model": MODEL,
+            "status": "CURRENT",
+            "created_at": firestore.SERVER_TIMESTAMP,
+        }
+    )
+    return path
 
 
 def artifact_path(registry_id: str) -> Path:

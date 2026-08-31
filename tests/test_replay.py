@@ -3,8 +3,8 @@
 from collections import Counter
 
 from app.data import load_tickets, migration_events
-from app.models import IncidentAnalysis, SkillStep, TemporalSkill
-from app.replay import evaluate_current_skill
+from app.models import DriftUpdate, IncidentAnalysis, SkillStep, TemporalSkill
+from app.replay import evaluate_current_skill, evaluate_drift_update
 
 
 def current_skill() -> TemporalSkill:
@@ -96,3 +96,29 @@ def test_current_skill_rejects_stale_actions_and_passes_temporal_replay() -> Non
     assert report.score == 100
     assert report.verdict == "PASS"
     assert all(report.checks.values())
+
+
+def test_drift_update_retires_old_identity_annotation() -> None:
+    update = DriftUpdate(
+        event_id="ARCH-2026-09-WIF",
+        previous_version="v4",
+        new_version="v5",
+        stale_reason="The old Google service account annotation is retired.",
+        retired_actions=["iam.gke.io annotation"],
+        current_architecture="Direct Workload Identity Federation principal binding",
+        workflow=[
+            SkillStep(
+                id="inspect", tool="gke.principal.inspect", instruction="Inspect principal binding."
+            ),
+            SkillStep(
+                id="terraform", tool="terraform.plan", instruction="Validate Terraform IAM change."
+            ),
+            SkillStep(id="pr", tool="git.pull-request", instruction="Open Git pull request."),
+            SkillStep(id="jcasc", tool="jcasc.validate", instruction="Validate JCasC."),
+            SkillStep(id="diff", tool="argocd.diff", instruction="Inspect Argo CD diff."),
+        ],
+        jcasc_patch="serviceAccount: ci-build-agent\n",
+    )
+    report = evaluate_drift_update(update)
+    assert report.score == 100
+    assert report.verdict == "PASS"

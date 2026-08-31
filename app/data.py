@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from functools import lru_cache
 from typing import TypedDict
 
-from app.models import EraId, JenkinsTicket, MigrationEvent
+from app.models import DriftEvent, EraId, JenkinsTicket, MigrationEvent
 
 
 class EraConfig(TypedDict):
@@ -103,6 +103,22 @@ ISSUES = [
 CURRENT_INCIDENT = (
     "Thirty-seven Jenkins builds are queued. Ephemeral GKE agents fail to start after a service "
     "account change. The controller is healthy, but new agent pods cannot authenticate."
+)
+
+NEXT_DRIFT_EVENT = DriftEvent(
+    event_id="ARCH-2026-09-WIF",
+    effective_date="2026-09-01",
+    source="gcp",
+    title="Jenkins agents adopt direct Workload Identity Federation principal binding",
+    change=(
+        "The ci-build-agent Kubernetes service account now receives IAM permissions directly "
+        "through its workload identity principal. Google service account impersonation is retired."
+    ),
+    retired_configuration="iam.gke.io/gcp-service-account annotation on jenkins-agent",
+    new_configuration=(
+        "ci-build-agent Kubernetes service account with direct principalSet IAM binding managed "
+        "through Terraform and GitOps"
+    ),
 )
 
 

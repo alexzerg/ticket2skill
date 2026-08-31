@@ -77,6 +77,22 @@ The skill explicitly retires:
 
 The generated patch targets the current JCasC Kubernetes agent template and Workload Identity service account.
 
+## Continuous drift monitoring
+
+Initial backfill is only the onboarding step. After publication, Runbook Drift monitors new architecture evidence from Git, Argo CD, Google Cloud, and resolved incidents through Pub/Sub.
+
+The live demo sends a real `architecture.drift` message to the `runbook-drift-events` topic. A new identity migration retires the `iam.gke.io/gcp-service-account` annotation and adopts direct Workload Identity Federation principal binding with the `ci-build-agent` Kubernetes service account.
+
+```text
+Pub/Sub architecture event
+→ v4 marked STALE
+→ Gemini Drift Agent generates v5
+→ deterministic drift replay reaches 100%
+→ v5 published to Firestore as CURRENT
+```
+
+This turns a one-time history import into a continuous skill lifecycle.
+
 ## Why it is different
 
 Historical-ticket training, agent evaluation, and workflow induction already exist. Runbook Drift addresses the failure mode they create when enterprise architecture changes over time.
@@ -90,6 +106,7 @@ The migration log has higher authority than historical frequency. Old tickets re
 - Gemini 3.5 Flash through Vertex AI global endpoint
 - Google GenAI SDK for Timeline Miner, Temporal Skill Compiler, and Incident Resolver
 - Cloud Run for the public application
+- Pub/Sub for continuous architecture-drift events
 - Firestore for versioned temporal skill evidence
 - Cloud Build and Artifact Registry for delivery
 - Google Compute Engine and GKE as the historical architecture storyline

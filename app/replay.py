@@ -2,7 +2,7 @@
 
 import re
 
-from app.models import IncidentAnalysis, TemporalReplayReport, TemporalSkill
+from app.models import DriftUpdate, IncidentAnalysis, TemporalReplayReport, TemporalSkill
 
 
 def evaluate_current_skill(
@@ -29,6 +29,29 @@ def evaluate_current_skill(
         "workload_identity_annotation": "iam.gke.io/gcp-service-account" in patch,
         "stale_majority_rejected": "obsolete" in incident.stale_reason.lower()
         or "retired" in incident.stale_reason.lower(),
+    }
+    score = round(sum(checks.values()) / len(checks) * 100)
+    return TemporalReplayReport(
+        score=score,
+        checks=checks,
+        verdict="PASS" if score == 100 else "FAIL",
+    )
+
+
+def evaluate_drift_update(update: DriftUpdate) -> TemporalReplayReport:
+    workflow = " ".join(f"{step.tool} {step.instruction}" for step in update.workflow).lower()
+    patch = update.jcasc_patch.lower()
+    checks = {
+        "version_advanced": update.previous_version == "v4" and update.new_version == "v5",
+        "retired_annotation_detected": "annotation" in update.stale_reason.lower(),
+        "direct_principal_binding": "principal" in workflow
+        or "principal" in update.current_architecture.lower(),
+        "terraform_change_validated": "terraform" in workflow,
+        "git_pull_request_required": "git" in workflow and "pull" in workflow,
+        "jcasc_validated": "jcasc" in workflow,
+        "argocd_diff_before_sync": "argocd" in workflow and "diff" in workflow,
+        "new_service_account": bool(re.search(r"serviceaccount:\s*['\"]?ci-build-agent", patch)),
+        "old_annotation_removed": "iam.gke.io/gcp-service-account" not in patch,
     }
     score = round(sum(checks.values()) / len(checks) * 100)
     return TemporalReplayReport(

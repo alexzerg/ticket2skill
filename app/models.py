@@ -53,7 +53,7 @@ class SkillStep(BaseModel):
 
 class TemporalSkill(BaseModel):
     name: Literal["jenkins-current-recovery"]
-    version: Literal["v4"]
+    version: Literal["v4", "v5"]
     current_era: Literal["ephemeral"]
     current_architecture: str
     source_ticket_count: int
@@ -85,3 +85,24 @@ class PublishedTemporalSkill(BaseModel):
     source_ticket_count: int
     current_era: str
     replay_score: int
+
+
+class DriftEvent(BaseModel):
+    event_id: str
+    effective_date: str
+    source: Literal["git", "argocd", "gcp"]
+    title: str
+    change: str
+    retired_configuration: str
+    new_configuration: str
+
+
+class DriftUpdate(BaseModel):
+    event_id: str
+    previous_version: Literal["v4"]
+    new_version: Literal["v5"]
+    stale_reason: str
+    retired_actions: list[str] = Field(min_length=1)
+    current_architecture: str
+    workflow: list[SkillStep] = Field(min_length=4)
+    jcasc_patch: str

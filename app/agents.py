@@ -7,6 +7,8 @@ from google import genai
 from google.genai import types
 
 from app.models import (
+    DriftEvent,
+    DriftUpdate,
     IncidentAnalysis,
     JenkinsTicket,
     MigrationEvent,
@@ -126,3 +128,32 @@ Incident:
         if not response.text:
             raise RuntimeError("Gemini returned no incident resolution")
         return IncidentAnalysis.model_validate_json(response.text)
+
+    def update_for_drift(self, skill: TemporalSkill, event: DriftEvent) -> DriftUpdate:
+        prompt = f"""
+You are the Continuous Drift Agent. A new authoritative architecture event invalidates part of the
+currently published Jenkins recovery skill. Return DriftUpdate JSON.
+
+Required versions: previous_version=v4 and new_version=v5. Explain why the old
+iam.gke.io/gcp-service-account annotation is stale. The updated workflow must inspect the direct GKE
+Workload Identity Federation principal binding, change the Kubernetes service account to
+ci-build-agent through a Git pull request, validate JCasC, validate the Terraform IAM change,
+inspect Argo CD diff, and sync only after approval.
+
+The new JCasC patch must set serviceAccount: ci-build-agent and must not contain the retired
+Google-service-account annotation.
+
+Current skill:
+{skill.model_dump_json()}
+
+Architecture event:
+{event.model_dump_json()}
+"""
+        response = self.client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=self._config(DriftUpdate),
+        )
+        if not response.text:
+            raise RuntimeError("Gemini returned no drift update")
+        return DriftUpdate.model_validate_json(response.text)
