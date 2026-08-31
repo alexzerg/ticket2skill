@@ -1,110 +1,150 @@
 # Ticket2Skill
 
-**Turn resolved enterprise work into tested, versioned agent skills.**
+**Turn resolved enterprise work into tested, reusable agent skills.**
 
-Ticket2Skill is an autonomous skill compiler built for the [All Things Agentic Hackathon](https://allthingsagentichackathon.devpost.com/). Gemini 3.5 mines repeated workflows from resolved support tickets, creates an executable skill, replays it against held-out cases, repairs regressions, and publishes only a proven version.
+Ticket2Skill is an autonomous work-to-skill compiler created for the [All Things Agentic Hackathon](https://allthingsagentichackathon.devpost.com/). Gemini 3.5 mines repeated workflows from resolved enterprise tickets, generates an executable skill, replays it against unseen policy cases, repairs regressions, and publishes only a proven version.
 
 **Live demo:** https://ticket2skill-1027721936124.us-central1.run.app
 
-## Tangible result
+## The result
 
-The pipeline produces a downloadable skill package rather than another chat response:
+Ticket history becomes a reusable production capability instead of another report or chat response:
 
 ```text
-vpn-access-recovery-v2/
-├── skill.yaml          # inputs, workflow, tools, policies
-├── agent.py            # executable generated agent artifact
-├── policy.json         # machine-readable governance rules
-├── eval-report.json    # held-out replay evidence
-└── README.md
+Resolved tickets → Gemini skill v1 → held-out replay → Gemini repair → skill v2 → registry
 ```
 
-The published version is also stored in a Firestore Agent Registry and can immediately process a new unseen ticket with an auditable tool trace.
+The current synthetic enterprise catalog contains 470 varied resolved tickets:
 
-## Demo flow
+| Category | Evidence tickets | Example capability |
+|---|---:|---|
+| VPN access | 200 | Verify identity, revoke sessions, issue recovery |
+| Jenkins failures | 120 | Diagnose and retry safe transient jobs |
+| New hardware requests | 80 | Replace broken assets while enforcing device limits |
+| Database access | 40 | Grant expiring least-privilege access |
+| SonarQube access | 30 | Grant project-scoped roles and protect admin access |
 
-1. Pattern Miner analyzes eight synthetic resolved VPN tickets.
-2. Gemini 3.5 compiles `vpn-access-recovery:v1` from evidence present in those tickets.
-3. Held-out replay exposes two unseen enterprise policies: contractors require manager approval, and terminated users must be denied.
-4. Replay Critic generates `v2` from the failure evidence.
-5. The same held-out regression gate improves from **50% to 100%**.
-6. Registry Publisher writes the proven skill to Firestore and creates the ZIP package.
-7. The published skill processes a fresh queue: it auto-resolves a standard employee case, creates an approval request for a contractor, and denies a terminated identity before credential mutation.
+Each category has separate training evidence, held-out policy exceptions, and a fresh work queue.
+
+## How it works
+
+1. Select a category.
+2. Gemini 3.5 reads every resolved ticket in that category as structured JSON evidence.
+3. Pattern Miner and Skill Builder compile `skill:v1` using only patterns visible in the evidence.
+4. A deterministic runtime replays v1 against held-out cases that Gemini has not seen.
+5. Replay Critic receives the failure evidence and generates `skill:v2`.
+6. The same held-out gate must reach 100% before publication.
+7. Registry Publisher writes the versioned skill and evidence to Firestore.
+8. The published skill processes a new work queue, produces business artifacts, and is available through an API and downloadable package.
+
+The 200-ticket VPN run currently demonstrates:
+
+```text
+v1 replay: 33% — contractor and terminated-user policies missing
+v2 replay: 100% PASS
+```
+
+## Tangible artifacts
+
+Every published version produces:
+
+```text
+category-skill-v2/
+├── skill.yaml          # inputs, tools, workflow, and policies
+├── agent.py            # ready-to-call Gemini wrapper
+├── policy.json         # governance rules
+├── eval-report.json    # held-out replay evidence
+└── README.md           # usage instructions
+```
+
+The same version is stored in the Firestore Agent Registry.
+
+## Use a published skill
+
+### REST API
+
+```http
+POST /api/skills/{registry_id}/execute
+Content-Type: application/json
+```
+
+### Download and give it to Gemini
+
+```python
+from agent import run_with_gemini
+
+result = run_with_gemini(
+    {
+        "issue": "Employee lost database access",
+        "attributes": {
+            "environment": "staging",
+            "privilege": "read",
+            "owner_approval": True,
+        },
+    }
+)
+```
+
+`agent.py` loads the tested SkillSpec as Gemini's system instruction. The ticket becomes structured input, while the SkillSpec constrains allowed tools, workflow, policies, and success criteria.
 
 ## Why it is different
 
-Existing agent evaluation tools start with an agent that someone already built. Ticket2Skill starts with the history of successful human work and autonomously creates a new reusable capability.
+Existing evaluation tools start with an agent someone already built. Ticket2Skill starts with the history of successful human work and autonomously creates a new capability.
 
-```text
-Resolved work → generated skill → held-out replay → AI repair → versioned publication
-```
+Evaluation is not the product; it is the publication gate:
 
-Evaluation is not the product; it is the publication gate for an autonomous work-to-skill compiler.
+- training and held-out tickets are isolated;
+- generated skills have typed inputs and tool allowlists;
+- replay checks decisions and tool trajectories deterministically;
+- the critic creates the next version from regression evidence;
+- publication requires a 100% held-out score;
+- published skills are versioned, downloadable, and callable.
 
-## Architecture
+## Google Cloud architecture
 
 ```mermaid
 flowchart LR
-    A[Resolved tickets\nTraining evidence] --> B[Pattern Miner\nGemini 3.5]
+    A[470 resolved tickets] --> B[Pattern Miner\nGemini 3.5]
     B --> C[Skill Builder\nGemini 3.5]
     C --> D[Skill v1]
-    E[Held-out tickets] --> F[Deterministic Replay Runtime]
+    E[Held-out cases] --> F[Deterministic Replay]
     D --> F
-    F --> G{100% pass?}
+    F --> G{100%?}
     G -- No --> H[Replay Critic\nGemini 3.5]
     H --> I[Skill v2]
     I --> F
     G -- Yes --> J[Registry Publisher]
-    J --> K[(Firestore Agent Registry)]
-    J --> L[Downloadable skill ZIP]
-    K --> M[Execute on new ticket]
-
-    subgraph Google Cloud
-      B
-      C
-      H
-      K
-      N[Cloud Run API and UI]
-    end
+    J --> K[(Firestore)]
+    J --> L[Downloadable ZIP]
+    K --> M[Reusable Skill API]
 ```
 
-More detail: [`docs/architecture.md`](docs/architecture.md).
+- Gemini 3.5 Flash through the Vertex AI global endpoint
+- Google GenAI SDK as the agent framework
+- Cloud Run for the live application
+- Firestore for the versioned Agent Registry
+- Cloud Build and Artifact Registry for delivery
 
-## Google technology
+Google Cloud project: `ticket2skill-agentic-26`. All data is synthetic, and no corporate systems or datasets are used.
 
-- **Gemini 3.5 Flash** through Vertex AI global endpoint
-- **Google GenAI SDK** as the agent framework
-- **Cloud Run** for the deployed API and demo UI
-- **Firestore** for the versioned Agent Registry
-- **Cloud Build** and **Artifact Registry** for container delivery
-
-Google Cloud project: `ticket2skill-agentic-26`. No corporate data or services are used.
-
-## Local development
+## Development
 
 ```bash
 /opt/homebrew/bin/python3.12 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-GOOGLE_CLOUD_PROJECT=ticket2skill-agentic-26 \
-GOOGLE_CLOUD_LOCATION=global \
-TICKET2SKILL_MODEL=gemini-3.5-flash \
 make run
 ```
 
-## Deploy
+Deploy:
 
 ```bash
-gcloud builds submit \
-  --project=ticket2skill-agentic-26 \
-  --tag=us-central1-docker.pkg.dev/ticket2skill-agentic-26/ticket2skill/app:VERSION .
-
 make deploy
 ```
 
-## Safety and evaluation
+Quality gate:
 
-All demo tickets are synthetic. Training and held-out cases are explicitly separated. Gemini creates and repairs the skill, while a deterministic runtime checks outcomes, tool authorization, policy behavior, and tool-call ordering. A skill cannot be published unless it achieves 100% on the held-out replay gate.
-
-## Repository
-
-This project was created from scratch for the All Things Agentic Hackathon in a personal GitHub account.
+```bash
+ruff check .
+mypy
+pytest -q
+```

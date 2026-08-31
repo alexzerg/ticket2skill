@@ -1,81 +1,65 @@
-"""Deterministic replay and publication-gate tests."""
+"""Multi-domain dataset and deterministic replay tests."""
 
-from app.data import tickets_for
-from app.models import PolicyRule, SkillSpec, ToolStep
+from app.catalog import CATEGORIES, definition
+from app.data import held_out_tickets, new_tickets, training_tickets
+from app.models import PolicyRule, SkillSpec
 from app.replay import execute_skill, replay_skill
 
+EXPECTED_COUNTS = {
+    "vpn": 200,
+    "jenkins": 120,
+    "hardware": 80,
+    "database": 40,
+    "sonarqube": 30,
+}
 
-def skill(version: str, with_exception_policies: bool) -> SkillSpec:
-    policies = [
-        PolicyRule(
-            id="active-employee",
-            condition="requester is an active employee",
-            outcome="RESOLVE",
-            rationale="Resolved-ticket evidence supports standard recovery.",
-        )
-    ]
-    tools = [
-        "identity.lookup",
-        "employment.verify",
-        "vpn.revoke_sessions",
-        "vpn.issue_recovery",
-        "audit.record",
-    ]
-    if with_exception_policies:
-        policies.extend(
-            [
-                PolicyRule(
-                    id="contractor-approval",
-                    condition="contractor requires manager approval when approval is absent",
-                    outcome="ESCALATE",
-                    rationale="Held-out policy evidence requires human approval.",
-                ),
-                PolicyRule(
-                    id="terminated-deny",
-                    condition="terminated identities are denied",
-                    outcome="DENY",
-                    rationale="Terminated users cannot receive credentials.",
-                ),
-            ]
-        )
-        tools.append("manager.request_approval")
+
+def skill(category: str, version: str, repaired: bool) -> SkillSpec:
+    config = definition(category)
+    policies: list[PolicyRule] = []
+    if repaired:
+        policies = [
+            PolicyRule(
+                id=f"policy-{index}",
+                condition=" and ".join(ticket.required_policy_terms),
+                outcome=ticket.expected_outcome,
+                rationale=f"Held-out failure evidence from {ticket.id}.",
+            )
+            for index, ticket in enumerate(held_out_tickets(category), start=1)
+            if ticket.required_policy_terms
+        ]
     return SkillSpec(
-        name="vpn-access-recovery",
+        name=config.skill_name,
+        category=category,
         version=version,
-        purpose="Recover VPN access safely.",
-        inputs=["identity", "employment_status", "requester_type"],
-        allowed_tools=tools,
-        workflow=[
-            ToolStep(id="lookup", tool="identity.lookup", instruction="Find identity."),
-            ToolStep(id="verify", tool="employment.verify", instruction="Verify status."),
-            ToolStep(id="revoke", tool="vpn.revoke_sessions", instruction="Revoke sessions."),
-        ],
+        purpose=config.purpose,
+        inputs=config.inputs,
+        allowed_tools=[*config.standard_tools, config.escalation_tool],
+        workflow=config.workflow,
         policy_rules=policies,
-        success_criteria=["Correct outcome", "Authorized tool trace"],
+        success_criteria=["Correct business outcome", "Authorized tool trajectory"],
     )
 
 
-def test_v1_exposes_unseen_enterprise_policy_failures() -> None:
-    report = replay_skill(skill("v1", False), tickets_for("held_out"))
-    assert report.score == 50
-    assert report.verdict == "FAIL"
-    assert {case.ticket_id for case in report.cases if not case.passed} == {
-        "INC-2002",
-        "INC-2004",
-    }
+def test_ticket_evidence_counts_are_distinct_and_exact() -> None:
+    assert set(CATEGORIES) == set(EXPECTED_COUNTS)
+    assert {category: len(training_tickets(category)) for category in CATEGORIES} == EXPECTED_COUNTS
+    assert sum(EXPECTED_COUNTS.values()) == 470
 
 
-def test_v2_passes_held_out_replay_and_new_ticket_queue() -> None:
-    generated = skill("v2", True)
-    report = replay_skill(generated, tickets_for("held_out"))
-    new_results = {
-        ticket.id: execute_skill(generated, ticket) for ticket in tickets_for("new")
-    }
-    assert report.score == 100
-    assert report.verdict == "PASS"
-    assert new_results["INC-3001"].actual == "RESOLVE"
-    assert new_results["INC-3002"].actual == "ESCALATE"
-    assert "manager.request_approval" in new_results["INC-3002"].tool_trace
-    assert "vpn.issue_recovery" not in new_results["INC-3002"].tool_trace
-    assert new_results["INC-3003"].actual == "DENY"
-    assert "vpn.issue_recovery" not in new_results["INC-3003"].tool_trace
+def test_v1_exposes_unseen_policy_failures_in_every_category() -> None:
+    for category in CATEGORIES:
+        report = replay_skill(skill(category, "v1", False), held_out_tickets(category))
+        assert report.verdict == "FAIL"
+        assert report.score < 100
+        assert report.failures
+
+
+def test_repaired_skills_pass_and_process_new_work() -> None:
+    for category in CATEGORIES:
+        generated = skill(category, "v2", True)
+        report = replay_skill(generated, held_out_tickets(category))
+        outcomes = {execute_skill(generated, ticket).actual for ticket in new_tickets(category)}
+        assert report.score == 100
+        assert report.verdict == "PASS"
+        assert outcomes == {"RESOLVE", "ESCALATE", "DENY"}

@@ -2,11 +2,11 @@
 
 import json
 import os
-from typing import Any
 
 from google import genai
 from google.genai import types
 
+from app.catalog import definition
 from app.models import ReplayReport, SkillSpec, Ticket
 
 MODEL = os.environ.get("TICKET2SKILL_MODEL", "gemini-3.5-flash")
@@ -36,60 +36,100 @@ class SkillAgents:
             raise RuntimeError("Gemini returned no structured skill")
         return SkillSpec.model_validate_json(response.text)
 
-    def discover_skill(self, tickets: list[Ticket]) -> SkillSpec:
+    def discover_skill(self, category: str, tickets: list[Ticket]) -> SkillSpec:
+        """Compile repeated human work from one evidence category."""
+
+        config = definition(category)
         evidence = [
             {
                 "id": ticket.id,
                 "issue": ticket.issue,
-                "resolution_notes": ticket.resolution_notes,
-                "requester_type": ticket.requester_type,
-                "employment_status": ticket.employment_status,
+                "resolution": ticket.resolution_notes,
+                "attributes": ticket.attributes,
             }
             for ticket in tickets
         ]
         prompt = f"""
-You are Pattern Miner and Skill Builder agents working as one pipeline.
-Compile the repeated human workflow in these resolved enterprise VPN tickets into a reusable skill.
-Return SkillSpec JSON only. Set name to vpn-access-recovery and version to v1.
-Use only these tools when evidenced: identity.lookup, employment.verify,
-vpn.revoke_sessions, vpn.issue_recovery, audit.record.
-Create a workflow that verifies identity and employment before issuing recovery.
-Create policy rules only for conditions explicitly evidenced by the supplied tickets.
-Do not invent policies for requester types or employment states absent from the evidence.
+You are Pattern Miner and Skill Builder agents working as an autonomous compiler.
+Analyze every resolved enterprise ticket below and compile the repeated human workflow into a
+reusable agent skill. Return SkillSpec JSON only.
 
-Resolved ticket evidence:
-{json.dumps(evidence, indent=2)}
+Required identity:
+- name: {config.skill_name}
+- category: {category}
+- version: v1
+- purpose: {config.purpose}
+- inputs: {json.dumps(config.inputs)}
+
+Only select tools from this evidence-bound allowlist:
+{json.dumps(config.standard_tools)}
+
+Create an ordered workflow, success criteria, and only policies explicitly evidenced by the solved
+tickets. Do not invent exception policies for situations absent from the evidence.
+
+Resolved evidence ({len(evidence)} tickets):
+{json.dumps(evidence, separators=(",", ":"))}
 """
-        return self._generate(prompt)
-
-    def repair_skill(self, skill: SkillSpec, report: ReplayReport) -> SkillSpec:
-        failures: list[dict[str, Any]] = [
-            {
-                "ticket_id": case.ticket_id,
-                "expected": case.expected,
-                "actual": case.actual,
-                "finding": case.finding,
+        generated = self._generate(prompt)
+        return generated.model_copy(
+            update={
+                "name": config.skill_name,
+                "category": category,
+                "version": "v1",
+                "policy_rules": [
+                    rule for rule in generated.policy_rules if rule.outcome == "RESOLVE"
+                ],
             }
-            for case in report.cases
-            if not case.passed
-        ]
-        prompt = f"""
-You are the Replay Critic agent. Repair this generated enterprise skill using held-out
-regression failures. Return a complete SkillSpec JSON only.
+        )
 
-Requirements:
-- Keep name vpn-access-recovery and set version to v2.
-- Preserve the successful active-employee recovery workflow.
-- Add a policy whose condition contains contractor and manager approval; its outcome must be
-  ESCALATE when approval is absent.
-- Add a policy whose condition contains terminated; its outcome must be DENY.
-- Add manager.request_approval to allowed_tools and workflow.
-- Keep employment verification before any credential mutation.
+    def repair_skill(
+        self,
+        category: str,
+        skill: SkillSpec,
+        report: ReplayReport,
+        held_out: list[Ticket],
+    ) -> SkillSpec:
+        """Use held-out regression evidence to compile the next version."""
+
+        config = definition(category)
+        failed_ids = {case.ticket_id for case in report.cases if not case.passed}
+        failures = [
+            {
+                "ticket_id": ticket.id,
+                "issue": ticket.issue,
+                "attributes": ticket.attributes,
+                "expected_outcome": ticket.expected_outcome,
+                "required_policy_terms": ticket.required_policy_terms,
+            }
+            for ticket in held_out
+            if ticket.id in failed_ids
+        ]
+        allowed_tools = [*config.standard_tools, config.escalation_tool]
+        prompt = f"""
+You are the Replay Critic agent. Repair the generated skill using only the held-out regression
+failures. Return a complete SkillSpec JSON only.
+
+Required identity:
+- name: {config.skill_name}
+- category: {category}
+- version: v2
+
+Preserve the successful standard workflow. Add policy rules for every failed case. Each policy
+condition must contain all required_policy_terms from that failure and use its expected_outcome.
+Add the category escalation tool when an ESCALATE policy needs it.
+Allowed tools: {json.dumps(allowed_tools)}
 
 Skill v1:
-{skill.model_dump_json(indent=2)}
+{skill.model_dump_json()}
 
-Held-out replay failures:
-{json.dumps(failures, indent=2)}
+Held-out failures:
+{json.dumps(failures, separators=(",", ":"))}
 """
-        return self._generate(prompt)
+        generated = self._generate(prompt)
+        return generated.model_copy(
+            update={
+                "name": config.skill_name,
+                "category": category,
+                "version": "v2",
+            }
+        )

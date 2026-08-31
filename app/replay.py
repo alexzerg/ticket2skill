@@ -1,44 +1,39 @@
-"""Deterministic replay runtime for generated skills."""
+"""Deterministic replay runtime for generated multi-domain skills."""
 
-from typing import Literal
+from app.catalog import definition
+from app.models import Decision, ReplayCase, ReplayReport, SkillSpec, Ticket
 
-from app.models import ReplayCase, ReplayReport, SkillSpec, Ticket
 
-
-def _policy_text(skill: SkillSpec, outcome: str) -> str:
-    return " ".join(
-        f"{rule.id} {rule.condition} {rule.rationale}".lower()
-        for rule in skill.policy_rules
-        if rule.outcome == outcome
-    )
+def _matching_policy(skill: SkillSpec, terms: list[str]) -> Decision | None:
+    for outcome in ("DENY", "ESCALATE", "RESOLVE"):
+        for rule in skill.policy_rules:
+            text = f"{rule.id} {rule.condition} {rule.rationale}".lower()
+            if rule.outcome == outcome and all(term.lower() in text for term in terms):
+                return rule.outcome
+    return None
 
 
 def execute_skill(skill: SkillSpec, ticket: Ticket) -> ReplayCase:
-    """Execute policy decisions and emit an auditable tool trajectory."""
+    """Execute policy decisions without using evaluation labels as runtime input."""
 
-    deny_policy = _policy_text(skill, "DENY")
-    escalate_policy = _policy_text(skill, "ESCALATE")
-    trace = ["identity.lookup", "employment.verify"]
-    actual: Literal["RESOLVE", "ESCALATE", "DENY"]
-
-    if ticket.employment_status == "terminated" and "terminated" in deny_policy:
-        actual = "DENY"
-        trace.append("audit.record")
-        finding = "Terminated identity denied before credential mutation."
-    elif (
-        ticket.requester_type == "contractor"
-        and not ticket.manager_approval
-        and "contractor" in escalate_policy
-        and "approval" in escalate_policy
-    ):
-        actual = "ESCALATE"
-        trace.extend(["manager.request_approval", "audit.record"])
-        finding = "Contractor recovery paused for manager approval."
+    config = definition(ticket.category)
+    if ticket.required_policy_terms:
+        actual = _matching_policy(skill, ticket.required_policy_terms) or "RESOLVE"
     else:
         actual = "RESOLVE"
-        trace.extend(["vpn.revoke_sessions", "vpn.issue_recovery", "audit.record"])
-        finding = "Standard verified recovery workflow executed."
 
+    verification = [step.tool for step in config.workflow[:2]]
+    if actual == "RESOLVE":
+        trace = [step.tool for step in config.workflow]
+        finding = "Standard work completed and an auditable business artifact was created."
+    elif actual == "ESCALATE":
+        trace = [*verification, config.escalation_tool, "audit.record"]
+        finding = "Policy exception routed for approval before a privileged action."
+    else:
+        trace = [*verification, "audit.record"]
+        finding = "Unsafe request denied before a privileged action."
+
+    trace = list(dict.fromkeys(trace))
     unauthorized = [tool for tool in trace if tool not in skill.allowed_tools]
     passed = actual == ticket.expected_outcome and not unauthorized
     if unauthorized:
