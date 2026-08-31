@@ -1,4 +1,4 @@
-"""Gemini 3.5 agents that compile and repair enterprise skills."""
+"""Gemini 3.5 agents for temporal operations knowledge."""
 
 import json
 import os
@@ -6,130 +6,123 @@ import os
 from google import genai
 from google.genai import types
 
-from app.catalog import definition
-from app.models import ReplayReport, SkillSpec, Ticket
+from app.models import (
+    IncidentAnalysis,
+    JenkinsTicket,
+    MigrationEvent,
+    TemporalSkill,
+    TimelineAnalysis,
+)
 
 MODEL = os.environ.get("TICKET2SKILL_MODEL", "gemini-3.5-flash")
 PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "ticket2skill-agentic-26")
 LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
 
 
-class SkillAgents:
-    """Structured Gemini agents with deterministic input and output contracts."""
+class TemporalAgents:
+    """Timeline Miner, Skill Compiler, and Incident Resolver agents."""
 
     def __init__(self) -> None:
         self.client = genai.Client(vertexai=True, project=PROJECT, location=LOCATION)
 
-    def _generate(self, prompt: str) -> SkillSpec:
-        response = self.client.models.generate_content(
-            model=MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0,
-                max_output_tokens=4096,
-                response_mime_type="application/json",
-                response_schema=SkillSpec,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
+    def _config(self, schema: type[object], tokens: int = 8192) -> types.GenerateContentConfig:
+        return types.GenerateContentConfig(
+            temperature=0,
+            max_output_tokens=tokens,
+            response_mime_type="application/json",
+            response_schema=schema,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
-        if not response.text:
-            raise RuntimeError("Gemini returned no structured skill")
-        return SkillSpec.model_validate_json(response.text)
 
-    def discover_skill(self, category: str, tickets: list[Ticket]) -> SkillSpec:
-        """Compile repeated human work from one evidence category."""
-
-        config = definition(category)
+    def analyze_timeline(
+        self, tickets: list[JenkinsTicket], migrations: list[MigrationEvent]
+    ) -> TimelineAnalysis:
         evidence = [
             {
                 "id": ticket.id,
+                "resolved_at": ticket.resolved_at,
+                "era": ticket.era,
+                "architecture": ticket.architecture,
                 "issue": ticket.issue,
-                "resolution": ticket.resolution_notes,
-                "attributes": ticket.attributes,
+                "resolution": ticket.resolution,
+                "tools": ticket.tools_used,
             }
             for ticket in tickets
         ]
         prompt = f"""
-You are Pattern Miner and Skill Builder agents working as an autonomous compiler.
-Analyze every resolved enterprise ticket below and compile the repeated human workflow into a
-reusable agent skill. Return SkillSpec JSON only.
+You are the Timeline Miner agent. Analyze all 200 historical Jenkins tickets plus the authoritative
+migration change log. Detect exactly four operational eras: vm, helm, gitops, and ephemeral.
+Old tickets remain valid historical evidence but their actions may be retired. Return
+TimelineAnalysis JSON. Set current_era to ephemeral and source_ticket_count to 200.
 
-Required identity:
-- name: {config.skill_name}
-- category: {category}
-- version: v1
-- purpose: {config.purpose}
-- inputs: {json.dumps(config.inputs)}
+Authoritative migration log:
+{json.dumps([event.model_dump() for event in migrations], separators=(",", ":"))}
 
-Only select tools from this evidence-bound allowlist:
-{json.dumps(config.standard_tools)}
-
-Create an ordered workflow, success criteria, and only policies explicitly evidenced by the solved
-tickets. Do not invent exception policies for situations absent from the evidence.
-
-Resolved evidence ({len(evidence)} tickets):
+Historical tickets:
 {json.dumps(evidence, separators=(",", ":"))}
 """
-        generated = self._generate(prompt)
-        return generated.model_copy(
-            update={
-                "name": config.skill_name,
-                "category": category,
-                "version": "v1",
-                "policy_rules": [
-                    rule for rule in generated.policy_rules if rule.outcome == "RESOLVE"
-                ],
-            }
+        response = self.client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=self._config(TimelineAnalysis),
         )
+        if not response.text:
+            raise RuntimeError("Gemini returned no timeline")
+        return TimelineAnalysis.model_validate_json(response.text)
 
-    def repair_skill(
-        self,
-        category: str,
-        skill: SkillSpec,
-        report: ReplayReport,
-        held_out: list[Ticket],
-    ) -> SkillSpec:
-        """Use held-out regression evidence to compile the next version."""
-
-        config = definition(category)
-        failed_ids = {case.ticket_id for case in report.cases if not case.passed}
-        failures = [
-            {
-                "ticket_id": ticket.id,
-                "issue": ticket.issue,
-                "attributes": ticket.attributes,
-                "expected_outcome": ticket.expected_outcome,
-                "required_policy_terms": ticket.required_policy_terms,
-            }
-            for ticket in held_out
-            if ticket.id in failed_ids
-        ]
-        allowed_tools = [*config.standard_tools, config.escalation_tool]
+    def compile_skill(
+        self, timeline: TimelineAnalysis, migrations: list[MigrationEvent]
+    ) -> TemporalSkill:
         prompt = f"""
-You are the Replay Critic agent. Repair the generated skill using only the held-out regression
-failures. Return a complete SkillSpec JSON only.
+You are the Temporal Skill Compiler. Build the current Jenkins recovery skill from the timeline and
+migration log. Return TemporalSkill JSON.
 
-Required identity:
-- name: {config.skill_name}
-- category: {category}
-- version: v2
+Required identity: name=jenkins-current-recovery, version=v4, current_era=ephemeral.
+The current architecture is Argo CD managed JCasC with ephemeral GKE agents and Workload Identity.
+The workflow must diagnose GKE agent pods and Workload Identity, update the JCasC agent pod template
+through a Git pull request, validate JCasC, inspect Argo CD diff, and sync only after approval.
+Deprecated actions must include SSH/systemctl VM restart, editing local controller config, direct
+Helm upgrade, and persistent direct kubectl mutation.
 
-Preserve the successful standard workflow. Add policy rules for every failed case. Each policy
-condition must contain all required_policy_terms from that failure and use its expected_outcome.
-Add the category escalation tool when an ESCALATE policy needs it.
-Allowed tools: {json.dumps(allowed_tools)}
+Timeline:
+{timeline.model_dump_json()}
 
-Skill v1:
+Migration log:
+{json.dumps([event.model_dump() for event in migrations], separators=(",", ":"))}
+"""
+        response = self.client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=self._config(TemporalSkill),
+        )
+        if not response.text:
+            raise RuntimeError("Gemini returned no temporal skill")
+        return TemporalSkill.model_validate_json(response.text)
+
+    def resolve_incident(self, skill: TemporalSkill, incident: str) -> IncidentAnalysis:
+        prompt = f"""
+You are the Current-Era Incident Resolver. Resolve the new Jenkins incident using only the temporal
+skill. Contrast the historical majority answer with the current safe answer.
+
+The stale majority answer must describe SSH to a Compute Engine VM and systemctl restart Jenkins.
+Explain that this is obsolete because the VM fleet was retired, Jenkins is GitOps-managed on GKE,
+and agents now use Workload Identity.
+The current recommendation must update the JCasC Kubernetes agent pod template through a Git pull
+request, validate the configuration, inspect Argo CD diff, and sync after approval.
+Generate a concise valid YAML JCasC patch that sets serviceAccount: jenkins-agent and references the
+Google service account annotation iam.gke.io/gcp-service-account.
+
+Current temporal skill:
 {skill.model_dump_json()}
 
-Held-out failures:
-{json.dumps(failures, separators=(",", ":"))}
+Incident:
+{incident}
 """
-        generated = self._generate(prompt)
-        return generated.model_copy(
-            update={
-                "name": config.skill_name,
-                "category": category,
-                "version": "v2",
-            }
+        response = self.client.models.generate_content(
+            model=MODEL,
+            contents=prompt,
+            config=self._config(IncidentAnalysis),
         )
+        if not response.text:
+            raise RuntimeError("Gemini returned no incident resolution")
+        return IncidentAnalysis.model_validate_json(response.text)

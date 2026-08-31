@@ -1,133 +1,102 @@
-# Ticket2Skill
+# Runbook Drift
 
-**Turn resolved enterprise work into tested, reusable agent skills.**
+**Historical tickets know how the system used to work—not how it works now.**
 
-Ticket2Skill is an autonomous work-to-skill compiler created for the [All Things Agentic Hackathon](https://allthingsagentichackathon.devpost.com/). Gemini 3.5 mines repeated workflows from resolved enterprise tickets, generates an executable skill, replays it against unseen policy cases, repairs regressions, and publishes only a proven version.
+Runbook Drift is a temporal operations agent built for the All Things Agentic Hackathon. Gemini 3.5 analyzes 200 historical Jenkins incidents together with an authoritative migration log, discovers four architecture eras, retires stale procedures, and publishes a recovery skill for the current operating model.
 
 **Live demo:** https://ticket2skill-1027721936124.us-central1.run.app
 
-## The result
+## The problem
 
-Ticket history becomes a reusable production capability instead of another report or chat response:
+A support or operations agent trained on historical tickets may confidently recommend the most common old answer.
 
-```text
-Resolved tickets → Gemini skill v1 → held-out replay → Gemini repair → skill v2 → registry
-```
-
-The current synthetic enterprise catalog contains 470 varied resolved tickets:
-
-| Category | Evidence tickets | Example capability |
-|---|---:|---|
-| VPN access | 200 | Verify identity, revoke sessions, issue recovery |
-| Jenkins failures | 120 | Diagnose and retry safe transient jobs |
-| New hardware requests | 80 | Replace broken assets while enforcing device limits |
-| Database access | 40 | Grant expiring least-privilege access |
-| SonarQube access | 30 | Grant project-scoped roles and protect admin access |
-
-Each category has separate training evidence, held-out policy exceptions, and a fresh work queue.
-
-## How it works
-
-1. Select a category.
-2. Gemini 3.5 reads every resolved ticket in that category as structured JSON evidence.
-3. Pattern Miner and Skill Builder compile `skill:v1` using only patterns visible in the evidence.
-4. A deterministic runtime replays v1 against held-out cases that Gemini has not seen.
-5. Replay Critic receives the failure evidence and generates `skill:v2`.
-6. The same held-out gate must reach 100% before publication.
-7. Registry Publisher writes the versioned skill and evidence to Firestore.
-8. The published skill processes a new work queue, produces business artifacts, and is available through an API and downloadable package.
-
-The 200-ticket VPN run currently demonstrates:
+For this company, 80 of 200 Jenkins tickets were resolved when Jenkins ran on 40 Google Compute Engine VMs:
 
 ```text
-v1 replay: 33% — contractor and terminated-user policies missing
-v2 replay: 100% PASS
+SSH to the affected VM → inspect journalctl → systemctl restart jenkins
 ```
 
-## Tangible artifacts
+That answer is now dangerous. The company subsequently migrated through four eras:
 
-Every published version produces:
+| Era | Tickets | Architecture | Valid recovery model |
+|---|---:|---|---|
+| VM | 80 | 40 independent Compute Engine VMs | SSH, systemctl, local configuration |
+| Helm | 55 | Jenkins consolidated on GKE | Helm values and Kubernetes rollout |
+| GitOps | 40 | JCasC stored in Git and reconciled by Argo CD | Pull request, JCasC validation, Argo diff/sync |
+| Current | 25 | Ephemeral GKE agents with Workload Identity | JCasC pod template and identity binding through GitOps |
+
+Historical frequency says “restart the VM.” Temporal context says those VMs no longer exist.
+
+## Demo incident
 
 ```text
-category-skill-v2/
-├── skill.yaml          # inputs, tools, workflow, and policies
-├── agent.py            # ready-to-call Gemini wrapper
-├── policy.json         # governance rules
-├── eval-report.json    # held-out replay evidence
-└── README.md           # usage instructions
+Thirty-seven Jenkins builds are queued.
+Ephemeral GKE agents fail to start after a service-account change.
+The controller is healthy, but new agent pods cannot authenticate.
 ```
 
-The same version is stored in the Firestore Agent Registry.
+Runbook Drift contrasts two answers:
 
-## Use a published skill
+```text
+HISTORICAL MAJORITY — STALE
+SSH to the affected Compute Engine VM and restart Jenkins with systemctl.
 
-### REST API
-
-```http
-POST /api/skills/{registry_id}/execute
-Content-Type: application/json
+CURRENT TEMPORAL SKILL — VALID NOW
+Inspect ephemeral agent pods and Workload Identity, update the JCasC pod template through a Git
+pull request, validate the configuration, inspect Argo CD diff, and sync after approval.
 ```
 
-### Download and give it to Gemini
+## Agent pipeline
 
-```python
-from agent import run_with_gemini
+1. Timeline Miner reads all 200 tickets, timestamps, tools, resolutions, and architecture labels.
+2. Gemini 3.5 reconciles ticket history with the authoritative migration change log.
+3. Temporal Skill Compiler creates `jenkins-current-recovery:v4`.
+4. Deterministic temporal replay checks that retired actions cannot re-enter the workflow.
+5. Current-Era Incident Resolver generates a valid JCasC patch for the new incident.
+6. Registry Publisher writes the timeline, skill, patch, and replay evidence to Firestore.
+7. A downloadable ZIP becomes the current Jenkins recovery artifact.
 
-result = run_with_gemini(
-    {
-        "issue": "Employee lost database access",
-        "attributes": {
-            "environment": "staging",
-            "privilege": "read",
-            "owner_approval": True,
-        },
-    }
-)
+## Tangible result
+
+```text
+jenkins-current-recovery-v4/
+├── skill.yaml
+├── timeline.json
+├── deprecated-actions.json
+├── jcasc-patch.yaml
+├── eval-report.json
+└── README.md
 ```
 
-`agent.py` loads the tested SkillSpec as Gemini's system instruction. The ticket becomes structured input, while the SkillSpec constrains allowed tools, workflow, policies, and success criteria.
+The skill explicitly retires:
+
+- SSH and systemctl recovery on the removed Compute Engine fleet;
+- local Jenkins controller configuration edits;
+- direct Helm upgrades after GitOps adoption;
+- persistent direct kubectl mutations.
+
+The generated patch targets the current JCasC Kubernetes agent template and Workload Identity service account.
 
 ## Why it is different
 
-Existing evaluation tools start with an agent someone already built. Ticket2Skill starts with the history of successful human work and autonomously creates a new capability.
+Historical-ticket training, agent evaluation, and workflow induction already exist. Runbook Drift addresses the failure mode they create when enterprise architecture changes over time.
 
-Evaluation is not the product; it is the publication gate:
+> **Old tickets describe what worked then. Runbook Drift determines what is valid now.**
 
-- training and held-out tickets are isolated;
-- generated skills have typed inputs and tool allowlists;
-- replay checks decisions and tool trajectories deterministically;
-- the critic creates the next version from regression evidence;
-- publication requires a 100% held-out score;
-- published skills are versioned, downloadable, and callable.
+The migration log has higher authority than historical frequency. Old tickets remain useful as temporal evidence, but retired tools and architectures become negative constraints rather than recommendations.
 
 ## Google Cloud architecture
 
-```mermaid
-flowchart LR
-    A[470 resolved tickets] --> B[Pattern Miner\nGemini 3.5]
-    B --> C[Skill Builder\nGemini 3.5]
-    C --> D[Skill v1]
-    E[Held-out cases] --> F[Deterministic Replay]
-    D --> F
-    F --> G{100%?}
-    G -- No --> H[Replay Critic\nGemini 3.5]
-    H --> I[Skill v2]
-    I --> F
-    G -- Yes --> J[Registry Publisher]
-    J --> K[(Firestore)]
-    J --> L[Downloadable ZIP]
-    K --> M[Reusable Skill API]
-```
-
-- Gemini 3.5 Flash through the Vertex AI global endpoint
-- Google GenAI SDK as the agent framework
-- Cloud Run for the live application
-- Firestore for the versioned Agent Registry
+- Gemini 3.5 Flash through Vertex AI global endpoint
+- Google GenAI SDK for Timeline Miner, Temporal Skill Compiler, and Incident Resolver
+- Cloud Run for the public application
+- Firestore for versioned temporal skill evidence
 - Cloud Build and Artifact Registry for delivery
+- Google Compute Engine and GKE as the historical architecture storyline
 
-Google Cloud project: `ticket2skill-agentic-26`. All data is synthetic, and no corporate systems or datasets are used.
+Google Cloud project: `ticket2skill-agentic-26`. All tickets and infrastructure evidence are synthetic. No corporate data or systems are used.
 
-## Development
+## Run locally
 
 ```bash
 /opt/homebrew/bin/python3.12 -m venv .venv
@@ -139,12 +108,4 @@ Deploy:
 
 ```bash
 make deploy
-```
-
-Quality gate:
-
-```bash
-ruff check .
-mypy
-pytest -q
 ```

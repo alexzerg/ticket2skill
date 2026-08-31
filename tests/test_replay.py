@@ -1,65 +1,98 @@
-"""Multi-domain dataset and deterministic replay tests."""
+"""Temporal Jenkins history and replay tests."""
 
-from app.catalog import CATEGORIES, definition
-from app.data import held_out_tickets, new_tickets, training_tickets
-from app.models import PolicyRule, SkillSpec
-from app.replay import execute_skill, replay_skill
+from collections import Counter
 
-EXPECTED_COUNTS = {
-    "vpn": 200,
-    "jenkins": 120,
-    "hardware": 80,
-    "database": 40,
-    "sonarqube": 30,
-}
+from app.data import load_tickets, migration_events
+from app.models import IncidentAnalysis, SkillStep, TemporalSkill
+from app.replay import evaluate_current_skill
 
 
-def skill(category: str, version: str, repaired: bool) -> SkillSpec:
-    config = definition(category)
-    policies: list[PolicyRule] = []
-    if repaired:
-        policies = [
-            PolicyRule(
-                id=f"policy-{index}",
-                condition=" and ".join(ticket.required_policy_terms),
-                outcome=ticket.expected_outcome,
-                rationale=f"Held-out failure evidence from {ticket.id}.",
-            )
-            for index, ticket in enumerate(held_out_tickets(category), start=1)
-            if ticket.required_policy_terms
-        ]
-    return SkillSpec(
-        name=config.skill_name,
-        category=category,
-        version=version,
-        purpose=config.purpose,
-        inputs=config.inputs,
-        allowed_tools=[*config.standard_tools, config.escalation_tool],
-        workflow=config.workflow,
-        policy_rules=policies,
-        success_criteria=["Correct business outcome", "Authorized tool trajectory"],
+def current_skill() -> TemporalSkill:
+    return TemporalSkill(
+        name="jenkins-current-recovery",
+        version="v4",
+        current_era="ephemeral",
+        current_architecture=(
+            "Argo CD managed JCasC with ephemeral GKE agents and Workload Identity"
+        ),
+        source_ticket_count=200,
+        workflow=[
+            SkillStep(
+                id="diagnose",
+                tool="gke.agent-diagnostics",
+                instruction="Inspect Kubernetes agent pods.",
+            ),
+            SkillStep(
+                id="identity",
+                tool="workload-identity.inspect",
+                instruction="Check Workload Identity binding.",
+            ),
+            SkillStep(
+                id="pr",
+                tool="git.pull-request",
+                instruction="Open Git pull request with JCasC update.",
+            ),
+            SkillStep(
+                id="validate", tool="jcasc.validate", instruction="Validate JCasC configuration."
+            ),
+            SkillStep(
+                id="diff", tool="argocd.diff", instruction="Inspect Argo CD diff before sync."
+            ),
+            SkillStep(id="sync", tool="argocd.sync", instruction="Sync after approval."),
+        ],
+        deprecated_actions=[
+            "SSH and systemctl restart on retired Compute Engine VM",
+            "Edit local Jenkins controller configuration",
+            "Direct Helm upgrade",
+            "Persistent direct kubectl mutation",
+        ],
+        temporal_rules=[
+            "Use only the current architecture era.",
+            "Migration log overrides older ticket frequency.",
+            "Git remains the source of truth.",
+        ],
+        success_criteria=[
+            "Ephemeral agent authenticates",
+            "Argo CD is healthy",
+            "No direct persistent mutation",
+        ],
     )
 
 
-def test_ticket_evidence_counts_are_distinct_and_exact() -> None:
-    assert set(CATEGORIES) == set(EXPECTED_COUNTS)
-    assert {category: len(training_tickets(category)) for category in CATEGORIES} == EXPECTED_COUNTS
-    assert sum(EXPECTED_COUNTS.values()) == 470
+def incident() -> IncidentAnalysis:
+    return IncidentAnalysis(
+        incident="Ephemeral Jenkins agents cannot authenticate.",
+        stale_majority_answer="SSH to a VM and systemctl restart Jenkins.",
+        stale_reason="The Compute Engine fleet was retired and the advice is obsolete.",
+        current_recommendation=(
+            "Update JCasC through Git, validate, inspect Argo CD diff, and sync."
+        ),
+        planned_tool_trace=[
+            "gke.agent-diagnostics",
+            "workload-identity.inspect",
+            "git.pull-request",
+            "jcasc.validate",
+            "argocd.diff",
+            "argocd.sync",
+        ],
+        jcasc_patch=(
+            "serviceAccount: jenkins-agent\n"
+            "annotations:\n"
+            "  iam.gke.io/gcp-service-account: jenkins-agent@example.iam.gserviceaccount.com\n"
+        ),
+    )
 
 
-def test_v1_exposes_unseen_policy_failures_in_every_category() -> None:
-    for category in CATEGORIES:
-        report = replay_skill(skill(category, "v1", False), held_out_tickets(category))
-        assert report.verdict == "FAIL"
-        assert report.score < 100
-        assert report.failures
+def test_history_has_200_tickets_across_four_architecture_eras() -> None:
+    tickets = load_tickets()
+    counts = Counter(ticket.era for ticket in tickets)
+    assert len(tickets) == 200
+    assert counts == {"vm": 80, "helm": 55, "gitops": 40, "ephemeral": 25}
+    assert len(migration_events()) == 3
 
 
-def test_repaired_skills_pass_and_process_new_work() -> None:
-    for category in CATEGORIES:
-        generated = skill(category, "v2", True)
-        report = replay_skill(generated, held_out_tickets(category))
-        outcomes = {execute_skill(generated, ticket).actual for ticket in new_tickets(category)}
-        assert report.score == 100
-        assert report.verdict == "PASS"
-        assert outcomes == {"RESOLVE", "ESCALATE", "DENY"}
+def test_current_skill_rejects_stale_actions_and_passes_temporal_replay() -> None:
+    report = evaluate_current_skill(current_skill(), incident())
+    assert report.score == 100
+    assert report.verdict == "PASS"
+    assert all(report.checks.values())

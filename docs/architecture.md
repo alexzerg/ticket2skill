@@ -1,38 +1,35 @@
-# Ticket2Skill architecture
+# Runbook Drift architecture
 
-## Agent roles
+```mermaid
+flowchart LR
+    T[200 timestamped Jenkins tickets] --> M[Timeline Miner\nGemini 3.5]
+    C[Authoritative migration log] --> M
+    M --> E[Four architecture eras]
+    E --> S[Temporal Skill Compiler\nGemini 3.5]
+    S --> R[Deterministic temporal replay]
+    R --> I[Current-Era Incident Resolver]
+    I --> P[JCasC GitOps patch]
+    R --> F[(Firestore temporal registry)]
+    P --> F
+    F --> Z[Downloadable current skill ZIP]
+```
 
-### Pattern Miner
+## Authority order
 
-Reads resolved ticket evidence and identifies repeated human workflows. It may only infer policies visible in the training evidence.
+1. Current architecture declaration
+2. Migration change log
+3. Recent current-era tickets
+4. Older historical tickets
+5. Historical frequency
 
-### Skill Builder
+A high-frequency old action cannot override an explicit migration event.
 
-Produces a strict `SkillSpec`: inputs, allowed tools, ordered workflow, policy rules, and success criteria. Structured output is enforced with Pydantic and Gemini response schemas.
+## Agents
 
-### Replay Critic
+- **Timeline Miner:** detects operational eras from timestamps, tools, resolutions, and architecture evidence.
+- **Temporal Skill Compiler:** creates the current workflow and converts retired actions into negative constraints.
+- **Current-Era Incident Resolver:** resolves a new incident only with current tools and produces a JCasC patch.
 
-Receives only the generated skill and held-out failure evidence. It produces a complete next version rather than mutating production state.
+## Deterministic publication gate
 
-### Registry Publisher
-
-Accepts only a 100% replay result, writes a versioned Firestore record, and creates a portable artifact package.
-
-## Trust boundaries
-
-- Gemini never writes directly to Firestore or executes enterprise tools.
-- Generated tool names are restricted by a typed allowlist.
-- Held-out cases are never included in initial skill generation.
-- Replay decisions and tool trajectories are deterministic.
-- Publication requires a 100% replay score.
-- All tickets are synthetic hackathon fixtures.
-
-## Cloud resources
-
-| Resource | Purpose |
-|---|---|
-| Cloud Run `ticket2skill` | Public API and UI |
-| Vertex AI global endpoint | Gemini 3.5 structured generation |
-| Firestore `(default)` | Versioned agent skill registry |
-| Artifact Registry `ticket2skill` | Container images |
-| Cloud Build | Reproducible image builds |
+Publication requires all temporal checks to pass: current era, GKE agent diagnostics, Workload Identity, Git pull request, JCasC validation, Argo CD diff-before-sync, stale VM rejection, direct Helm rejection, and valid patch fields.

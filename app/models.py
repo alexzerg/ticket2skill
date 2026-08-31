@@ -1,101 +1,87 @@
-"""Typed tickets, generated skills, replay evidence, and registry records."""
+"""Temporal Jenkins operations models."""
 
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Decision = Literal["RESOLVE", "ESCALATE", "DENY"]
-AttributeValue = str | int | bool
+EraId = Literal["vm", "helm", "gitops", "ephemeral"]
 
 
-class CategorySummary(BaseModel):
-    id: str
-    name: str
-    description: str
-    evidence_count: int
-    held_out_count: int
-    new_count: int
-
-
-class WorkRequest(BaseModel):
+class JenkinsTicket(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str = "external-request"
-    category: str
+    id: str
+    resolved_at: str
+    era: EraId
+    architecture: str
     issue: str
-    attributes: dict[str, AttributeValue]
+    resolution: str
+    tools_used: list[str]
 
 
-class Ticket(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class MigrationEvent(BaseModel):
+    effective_date: str
+    from_architecture: str
+    to_architecture: str
+    policy_change: str
 
+
+class EraSummary(BaseModel):
+    id: EraId
+    label: str
+    period: str
+    architecture: str
+    ticket_count: int
+    dominant_resolution: str
+    valid_tools: list[str]
+    current: bool
+
+
+class TimelineAnalysis(BaseModel):
+    system: Literal["Jenkins"]
+    source_ticket_count: int
+    eras: list[EraSummary] = Field(min_length=4, max_length=4)
+    current_era: Literal["ephemeral"]
+    key_finding: str
+
+
+class SkillStep(BaseModel):
     id: str
-    category: str
-    split: Literal["training", "held_out", "new"]
-    issue: str
-    resolution_notes: str = ""
-    attributes: dict[str, AttributeValue]
-    required_policy_terms: list[str] = []
-    expected_outcome: Decision
-
-
-class ToolStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    tool: str = Field(pattern=r"^[a-z][a-z0-9_.-]+$")
     instruction: str
+    tool: str
 
 
-class PolicyRule(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    condition: str
-    outcome: Decision
-    rationale: str
-
-
-class SkillSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(pattern=r"^[a-z][a-z0-9-]+$")
-    category: str
-    version: str = Field(pattern=r"^v[0-9]+$")
-    purpose: str
-    inputs: list[str] = Field(min_length=2)
-    allowed_tools: list[str] = Field(min_length=3)
-    workflow: list[ToolStep] = Field(min_length=3)
-    policy_rules: list[PolicyRule]
-    success_criteria: list[str] = Field(min_length=2)
+class TemporalSkill(BaseModel):
+    name: Literal["jenkins-current-recovery"]
+    version: Literal["v4"]
+    current_era: Literal["ephemeral"]
+    current_architecture: str
+    source_ticket_count: int
+    workflow: list[SkillStep] = Field(min_length=4)
+    deprecated_actions: list[str] = Field(min_length=3)
+    temporal_rules: list[str] = Field(min_length=3)
+    success_criteria: list[str] = Field(min_length=3)
 
 
-class ReplayCase(BaseModel):
-    ticket_id: str
-    expected: Decision
-    actual: Decision
-    passed: bool
-    tool_trace: list[str]
-    finding: str
+class IncidentAnalysis(BaseModel):
+    incident: str
+    stale_majority_answer: str
+    stale_reason: str
+    current_recommendation: str
+    planned_tool_trace: list[str] = Field(min_length=3)
+    jcasc_patch: str
 
 
-class ReplayReport(BaseModel):
-    skill_name: str
-    skill_version: str
-    passed: int
-    total: int
+class TemporalReplayReport(BaseModel):
     score: int
-    cases: list[ReplayCase]
-    failures: list[str]
+    checks: dict[str, bool]
     verdict: Literal["PASS", "FAIL"]
 
 
-class PublishedSkill(BaseModel):
+class PublishedTemporalSkill(BaseModel):
     registry_id: str
-    name: str
-    category: str
-    version: str
-    replay_score: int
     firestore_path: str
     artifact_url: str
-    execute_url: str
+    source_ticket_count: int
+    current_era: str
+    replay_score: int
