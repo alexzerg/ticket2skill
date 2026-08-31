@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ticket2skill"
-version = "0.5.0"
+version = "0.5.1"
 description = "Turn resolved enterprise tickets into tested, versioned agent skills"
 requires-python = ">=3.12"
 dependencies = [

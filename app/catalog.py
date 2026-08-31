@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from app.models import Ticket, ToolStep
+from app.models import Decision, Ticket, ToolStep
 
 
 @dataclass(frozen=True)
@@ -719,3 +719,48 @@ def materialize_cases(category: str, split: str, cases: list[dict[str, object]])
         )
         for index, item in enumerate(cases, start=1)
     ]
+
+
+def classify_request(
+    category: str, attributes: dict[str, str | int | bool]
+) -> tuple[Decision, list[str]]:
+    """Derive the policy branch required for an external work request."""
+
+    if attributes.get("employment_status") == "terminated":
+        return "DENY", ["terminated"]
+    if category == "vpn":
+        if attributes.get("requester_type") == "contractor" and not attributes.get(
+            "manager_approval", False
+        ):
+            return "ESCALATE", ["contractor", "manager approval"]
+    elif category == "jenkins":
+        if "secret" in str(attributes.get("failure_type", "")).lower():
+            return "DENY", ["secret", "credential"]
+        if attributes.get("environment") == "production" and not attributes.get(
+            "owner_approval", False
+        ):
+            return "ESCALATE", ["production", "owner approval"]
+    elif category == "hardware":
+        if attributes.get("request_kind") == "additional device":
+            return "ESCALATE", ["additional device", "manager approval"]
+        if attributes.get("request_kind") == "broken replacement" and not attributes.get(
+            "asset_returned", False
+        ):
+            return "ESCALATE", ["broken replacement", "asset return"]
+    elif category == "database":
+        if (
+            attributes.get("environment") == "production"
+            and attributes.get("privilege") == "write"
+            and not attributes.get("dba_approval", False)
+        ):
+            return "ESCALATE", ["production", "write", "dba approval"]
+    elif category == "sonarqube":
+        if not attributes.get("repository_member", False):
+            return "DENY", ["repository membership", "deny"]
+        if attributes.get("requested_role") == "admin" and not attributes.get(
+            "security_approval", False
+        ):
+            return "ESCALATE", ["admin", "security approval"]
+    else:
+        definition(category)
+    return "RESOLVE", []

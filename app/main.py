@@ -9,13 +9,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.agents import LOCATION, MODEL, PROJECT, SkillAgents
-from app.catalog import definition
+from app.catalog import classify_request, definition
 from app.data import category_summaries, held_out_tickets, new_tickets, training_tickets
-from app.models import SkillSpec, Ticket
+from app.models import SkillSpec, Ticket, WorkRequest
 from app.registry import artifact_path, load_skill, publish_skill
 from app.replay import execute_skill, replay_skill
 
-app = FastAPI(title="Ticket2Skill", version="0.5.0")
+app = FastAPI(title="Ticket2Skill", version="0.5.1")
 state_lock = Lock()
 state: dict[str, Any] = {
     "category": None,
@@ -171,13 +171,23 @@ def run_new(category: str) -> dict[str, Any]:
 
 
 @app.post("/api/skills/{registry_id}/execute")
-def execute_published_skill(registry_id: str, ticket: Ticket) -> dict[str, Any]:
+def execute_published_skill(registry_id: str, request: WorkRequest) -> dict[str, Any]:
     try:
         skill = load_skill(registry_id)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="published skill not found") from error
-    if skill.category != ticket.category:
-        raise HTTPException(status_code=422, detail="ticket category does not match skill")
+    if skill.category != request.category:
+        raise HTTPException(status_code=422, detail="request category does not match skill")
+    expected, required_terms = classify_request(request.category, request.attributes)
+    ticket = Ticket(
+        id=request.id,
+        category=request.category,
+        split="new",
+        issue=request.issue,
+        attributes=request.attributes,
+        required_policy_terms=required_terms,
+        expected_outcome=expected,
+    )
     return _execution_outcome(ticket, execute_skill(skill, ticket))
 
 

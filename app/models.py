@@ -17,6 +17,15 @@ class CategorySummary(BaseModel):
     new_count: int
 
 
+class WorkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = "external-request"
+    category: str
+    issue: str
+    attributes: dict[str, AttributeValue]
+
+
 class Ticket(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
