@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT=${PROJECT:-ticket2skill-agentic-26}
 REGION=${REGION:-us-central1}
 SERVICE=${SERVICE:-ticket2skill}
-VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+VERSION=$(awk -F'"' '/^version = / {print $2; exit}' pyproject.toml)
 IMAGE="$REGION-docker.pkg.dev/$PROJECT/ticket2skill/app:$VERSION"
 
 gcloud builds submit --project="$PROJECT" --tag="$IMAGE" --timeout=900s --quiet .
