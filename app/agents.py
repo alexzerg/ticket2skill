@@ -56,6 +56,9 @@ You are the Timeline Miner agent. Analyze all 200 historical Jenkins tickets plu
 migration change log. Detect exactly four operational eras: vm, helm, gitops, and ephemeral.
 Old tickets remain valid historical evidence but their actions may be retired. Return
 TimelineAnalysis JSON. Set current_era to ephemeral and source_ticket_count to 200.
+Set legacy_exceptions to exactly three VM-era controllers: jenkins-paris, jenkins-barcelona, and
+jenkins-NYC. SSH, journalctl, and systemctl remain valid only when an incident target exactly
+matches one of those names; there is no wildcard VM exception.
 
 Authoritative migration log:
 {json.dumps([event.model_dump() for event in migrations], separators=(",", ":"))}
@@ -83,8 +86,10 @@ Required identity: name=jenkins-current-recovery, version=v4, current_era=epheme
 The current architecture is Argo CD managed JCasC with ephemeral GKE agents and Workload Identity.
 The workflow must diagnose GKE agent pods and Workload Identity, update the JCasC agent pod template
 through a Git pull request, validate JCasC, inspect Argo CD diff, and sync only after approval.
-Deprecated actions must include SSH/systemctl VM restart, editing local controller config, direct
-Helm upgrade, and persistent direct kubectl mutation.
+Deprecated actions must include SSH/systemctl VM restart for every non-allowlisted target, editing
+local controller config outside the three exceptions, direct Helm upgrade, and persistent direct
+kubectl mutation. Copy timeline.legacy_exceptions into the skill unchanged. The skill must route
+jenkins-paris, jenkins-barcelona, and jenkins-NYC to their scoped VM runbook only on exact match.
 
 Timeline:
 {timeline.model_dump_json()}
@@ -107,8 +112,9 @@ You are the Current-Era Incident Resolver. Resolve the new Jenkins incident usin
 skill. Contrast the historical majority answer with the current safe answer.
 
 The stale majority answer must describe SSH to a Compute Engine VM and systemctl restart Jenkins.
-Explain that this is obsolete because the VM fleet was retired, Jenkins is GitOps-managed on GKE,
-and agents now use Workload Identity.
+Explain that this is obsolete for the reported incident because it does not target jenkins-paris,
+jenkins-barcelona, or jenkins-NYC. Those three exact names are controlled VM-era exceptions; all
+other Jenkins recovery is GitOps-managed on GKE and agents use Workload Identity.
 The current recommendation must update the JCasC Kubernetes agent pod template through a Git pull
 request, validate the configuration, inspect Argo CD diff, and sync after approval.
 Generate a concise valid YAML JCasC patch that sets serviceAccount: jenkins-agent and references the
@@ -141,7 +147,9 @@ ci-build-agent through a Git pull request, validate JCasC, validate the Terrafor
 inspect Argo CD diff, and sync only after approval.
 
 The new JCasC patch must set serviceAccount: ci-build-agent and must not contain the retired
-Google-service-account annotation.
+Google-service-account annotation. Copy all three skill.legacy_exceptions into
+preserved_legacy_exceptions unchanged: the identity migration affects the GKE fleet, not the three
+explicit VM-era controllers.
 
 Current skill:
 {skill.model_dump_json()}

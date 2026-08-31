@@ -2,7 +2,7 @@
 
 from collections import Counter
 
-from app.data import load_tickets, migration_events
+from app.data import LEGACY_JENKINS_INSTANCES, legacy_exceptions, load_tickets, migration_events
 from app.models import DriftUpdate, IncidentAnalysis, SkillStep, TemporalSkill
 from app.replay import evaluate_current_skill, evaluate_drift_update
 
@@ -41,11 +41,12 @@ def current_skill() -> TemporalSkill:
             SkillStep(id="sync", tool="argocd.sync", instruction="Sync after approval."),
         ],
         deprecated_actions=[
-            "SSH and systemctl restart on retired Compute Engine VM",
-            "Edit local Jenkins controller configuration",
+            "SSH and systemctl restart on non-allowlisted Compute Engine VM",
+            "Edit local Jenkins controller configuration outside the allowlist",
             "Direct Helm upgrade",
             "Persistent direct kubectl mutation",
         ],
+        legacy_exceptions=legacy_exceptions(),
         temporal_rules=[
             "Use only the current architecture era.",
             "Migration log overrides older ticket frequency.",
@@ -63,7 +64,9 @@ def incident() -> IncidentAnalysis:
     return IncidentAnalysis(
         incident="Ephemeral Jenkins agents cannot authenticate.",
         stale_majority_answer="SSH to a VM and systemctl restart Jenkins.",
-        stale_reason="The Compute Engine fleet was retired and the advice is obsolete.",
+        stale_reason=(
+            "The target is not one of the three retained VM exceptions, so the advice is obsolete."
+        ),
         current_recommendation=(
             "Update JCasC through Git, validate, inspect Argo CD diff, and sync."
         ),
@@ -86,9 +89,12 @@ def incident() -> IncidentAnalysis:
 def test_history_has_200_tickets_across_four_architecture_eras() -> None:
     tickets = load_tickets()
     counts = Counter(ticket.era for ticket in tickets)
+    exceptions = legacy_exceptions()
     assert len(tickets) == 200
     assert counts == {"vm": 80, "helm": 55, "gitops": 40, "ephemeral": 25}
     assert len(migration_events()) == 3
+    assert tuple(exception.controller for exception in exceptions) == LEGACY_JENKINS_INSTANCES
+    assert all(exception.era == "vm" for exception in exceptions)
 
 
 def test_current_skill_rejects_stale_actions_and_passes_temporal_replay() -> None:
@@ -96,6 +102,14 @@ def test_current_skill_rejects_stale_actions_and_passes_temporal_replay() -> Non
     assert report.score == 100
     assert report.verdict == "PASS"
     assert all(report.checks.values())
+
+
+def test_replay_rejects_an_incomplete_legacy_allowlist() -> None:
+    skill = current_skill()
+    skill.legacy_exceptions[2] = skill.legacy_exceptions[0].model_copy()
+    report = evaluate_current_skill(skill, incident())
+    assert report.verdict == "FAIL"
+    assert not report.checks["legacy_exception_allowlist_exact"]
 
 
 def test_drift_update_retires_old_identity_annotation() -> None:
@@ -106,6 +120,7 @@ def test_drift_update_retires_old_identity_annotation() -> None:
         stale_reason="The old Google service account annotation is retired.",
         retired_actions=["iam.gke.io annotation"],
         current_architecture="Direct Workload Identity Federation principal binding",
+        preserved_legacy_exceptions=legacy_exceptions(),
         workflow=[
             SkillStep(
                 id="inspect", tool="gke.principal.inspect", instruction="Inspect principal binding."

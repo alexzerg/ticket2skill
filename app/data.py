@@ -4,7 +4,15 @@ from datetime import date, timedelta
 from functools import lru_cache
 from typing import TypedDict
 
-from app.models import DriftEvent, EraId, JenkinsTicket, MigrationEvent
+from app.models import (
+    DriftEvent,
+    EraId,
+    JenkinsTicket,
+    LegacyException,
+    MigrationEvent,
+)
+
+LEGACY_JENKINS_INSTANCES = ("jenkins-paris", "jenkins-barcelona", "jenkins-NYC")
 
 
 class EraConfig(TypedDict):
@@ -19,7 +27,10 @@ ERA_CONFIG: dict[EraId, EraConfig] = {
     "vm": {
         "count": 80,
         "start": date(2025, 9, 1),
-        "architecture": "40 independent Jenkins controllers on 40 Google Compute Engine VMs",
+        "architecture": (
+            "40 independent Jenkins controllers on Compute Engine VMs; 37 were retired and "
+            "three remain as controlled legacy exceptions"
+        ),
         "resolutions": [
             (
                 "SSH to the affected VM, inspect journalctl, restart Jenkins with "
@@ -122,6 +133,43 @@ NEXT_DRIFT_EVENT = DriftEvent(
 )
 
 
+def legacy_exceptions() -> list[LegacyException]:
+    """Return the exact legacy allowlist that survives the VM-to-GKE migration."""
+
+    architecture = "Dedicated Jenkins controller on a retained Compute Engine VM"
+    allowed_actions = [
+        "SSH to the named Compute Engine VM and inspect journalctl.",
+        "Restart only the named Jenkins service with systemctl after diagnosis.",
+    ]
+    return [
+        LegacyException(
+            controller="jenkins-paris",
+            era="vm",
+            architecture=architecture,
+            routing_condition=(
+                "Use only when the incident target exactly matches jenkins-paris."
+            ),
+            allowed_actions=allowed_actions,
+        ),
+        LegacyException(
+            controller="jenkins-barcelona",
+            era="vm",
+            architecture=architecture,
+            routing_condition=(
+                "Use only when the incident target exactly matches jenkins-barcelona."
+            ),
+            allowed_actions=allowed_actions,
+        ),
+        LegacyException(
+            controller="jenkins-NYC",
+            era="vm",
+            architecture=architecture,
+            routing_condition="Use only when the incident target exactly matches jenkins-NYC.",
+            allowed_actions=allowed_actions,
+        ),
+    ]
+
+
 @lru_cache(maxsize=1)
 def load_tickets() -> list[JenkinsTicket]:
     tickets: list[JenkinsTicket] = []
@@ -132,6 +180,11 @@ def load_tickets() -> list[JenkinsTicket]:
         for index in range(count):
             resolved_at = start + timedelta(days=index * 2)
             resolutions = config["resolutions"]
+            legacy_target = (
+                LEGACY_JENKINS_INSTANCES[index]
+                if era == "vm" and index < len(LEGACY_JENKINS_INSTANCES)
+                else "shared-fleet"
+            )
             tickets.append(
                 JenkinsTicket(
                     id=f"OPS-{1000 + sequence}",
@@ -141,7 +194,8 @@ def load_tickets() -> list[JenkinsTicket]:
                     issue=(
                         f"{ISSUES[index % len(ISSUES)]}; "
                         f"team={['Payments', 'Platform', 'Data', 'Risk'][index % 4]}; "
-                        f"priority={['medium', 'high', 'critical'][index % 3]}"
+                        f"priority={['medium', 'high', 'critical'][index % 3]}; "
+                        f"controller={legacy_target}"
                     ),
                     resolution=resolutions[index % len(resolutions)],
                     tools_used=list(config["tools"]),
@@ -157,7 +211,10 @@ def migration_events() -> list[MigrationEvent]:
             effective_date="2025-12-01",
             from_architecture="40 Compute Engine VM controllers",
             to_architecture="Consolidated GKE deployment managed by Helm",
-            policy_change="SSH and systemctl recovery procedures are retired.",
+            policy_change=(
+                "SSH and systemctl recovery procedures are retired by default. They remain valid "
+                "only for jenkins-paris, jenkins-barcelona, and jenkins-NYC."
+            ),
         ),
         MigrationEvent(
             effective_date="2026-05-01",

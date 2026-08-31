@@ -16,16 +16,16 @@ For this company, 80 of 200 Jenkins tickets were resolved when Jenkins ran on 40
 SSH to the affected VM → inspect journalctl → systemctl restart jenkins
 ```
 
-That answer is now dangerous. The company subsequently migrated through four eras:
+That answer is now dangerous as a default. Thirty-seven controllers were retired during the GKE migration, while exactly three remain as controlled exceptions: `jenkins-paris`, `jenkins-barcelona`, and `jenkins-NYC`. The company subsequently migrated through four eras:
 
 | Era | Tickets | Architecture | Valid recovery model |
 |---|---:|---|---|
-| VM | 80 | 40 independent Compute Engine VMs | SSH, systemctl, local configuration |
+| VM | 80 | 40 independent Compute Engine VMs; 37 retired, 3 retained | SSH/systemctl only for the exact three-controller allowlist |
 | Helm | 55 | Jenkins consolidated on GKE | Helm values and Kubernetes rollout |
 | GitOps | 40 | JCasC stored in Git and reconciled by Argo CD | Pull request, JCasC validation, Argo diff/sync |
 | Current | 25 | Ephemeral GKE agents with Workload Identity | JCasC pod template and identity binding through GitOps |
 
-Historical frequency says “restart the VM.” Temporal context says those VMs no longer exist.
+Historical frequency says “restart the VM.” Temporal context says that action is invalid unless the incident target exactly matches one of the three retained controllers.
 
 ## Synthetic Jira connector
 
@@ -78,6 +78,7 @@ jenkins-current-recovery-v4/
 ├── skill.yaml
 ├── timeline.json
 ├── deprecated-actions.json
+├── legacy-exceptions.json
 ├── jcasc-patch.yaml
 ├── eval-report.json
 └── README.md
@@ -85,12 +86,12 @@ jenkins-current-recovery-v4/
 
 The skill explicitly retires:
 
-- SSH and systemctl recovery on the removed Compute Engine fleet;
-- local Jenkins controller configuration edits;
+- SSH and systemctl recovery for every non-allowlisted Jenkins target;
+- local Jenkins controller configuration edits outside the three retained instances;
 - direct Helm upgrades after GitOps adoption;
 - persistent direct kubectl mutations.
 
-The generated patch targets the current JCasC Kubernetes agent template and Workload Identity service account.
+For `jenkins-paris`, `jenkins-barcelona`, and `jenkins-NYC`, the skill preserves a scoped VM runbook and permits SSH/systemctl only after an exact target match. The generated patch targets the current JCasC Kubernetes agent template and Workload Identity service account for all other incidents.
 
 ## Continuous drift monitoring
 
@@ -106,7 +107,7 @@ Pub/Sub architecture event
 → v5 published to Firestore as CURRENT
 ```
 
-This turns a one-time history import into a continuous skill lifecycle.
+The GKE identity change does not affect the three VM-era exceptions, so the exact allowlist is carried from v4 into v5 and replayed as an invariant. This turns a one-time history import into a continuous skill lifecycle.
 
 ## Why it is different
 

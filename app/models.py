@@ -26,6 +26,14 @@ class MigrationEvent(BaseModel):
     policy_change: str
 
 
+class LegacyException(BaseModel):
+    controller: Literal["jenkins-paris", "jenkins-barcelona", "jenkins-NYC"]
+    era: Literal["vm"]
+    architecture: str
+    routing_condition: str
+    allowed_actions: list[str] = Field(min_length=2)
+
+
 class EraSummary(BaseModel):
     id: EraId
     label: str
@@ -42,6 +50,7 @@ class TimelineAnalysis(BaseModel):
     source_ticket_count: int
     eras: list[EraSummary] = Field(min_length=4, max_length=4)
     current_era: Literal["ephemeral"]
+    legacy_exceptions: list[LegacyException] = Field(min_length=3, max_length=3)
     key_finding: str
 
 
@@ -59,6 +68,7 @@ class TemporalSkill(BaseModel):
     source_ticket_count: int
     workflow: list[SkillStep] = Field(min_length=4)
     deprecated_actions: list[str] = Field(min_length=3)
+    legacy_exceptions: list[LegacyException] = Field(min_length=3, max_length=3)
     temporal_rules: list[str] = Field(min_length=3)
     success_criteria: list[str] = Field(min_length=3)
 
@@ -104,5 +114,6 @@ class DriftUpdate(BaseModel):
     stale_reason: str
     retired_actions: list[str] = Field(min_length=1)
     current_architecture: str
+    preserved_legacy_exceptions: list[LegacyException] = Field(min_length=3, max_length=3)
     workflow: list[SkillStep] = Field(min_length=4)
     jcasc_patch: str

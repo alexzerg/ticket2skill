@@ -11,12 +11,18 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.agents import LOCATION, MODEL, PROJECT, TemporalAgents
-from app.data import CURRENT_INCIDENT, NEXT_DRIFT_EVENT, load_tickets, migration_events
+from app.data import (
+    CURRENT_INCIDENT,
+    NEXT_DRIFT_EVENT,
+    legacy_exceptions,
+    load_tickets,
+    migration_events,
+)
 from app.models import TemporalSkill, TimelineAnalysis
 from app.registry import artifact_path, publish_drift_update, publish_temporal_skill
 from app.replay import evaluate_current_skill, evaluate_drift_update
 
-app = FastAPI(title="Runbook Drift", version="0.8.0")
+app = FastAPI(title="Runbook Drift", version="0.9.0")
 state_lock = Lock()
 state: dict[str, Any] = {
     "jira_connected": False,
@@ -71,6 +77,7 @@ def history() -> dict[str, Any]:
         "ticket_count": len(tickets),
         "era_counts": dict(counts),
         "migrations": [event.model_dump() for event in migration_events()],
+        "legacy_exceptions": [exception.model_dump() for exception in legacy_exceptions()],
         "sample_tickets": [
             ticket.model_dump()
             for ticket in [
@@ -172,6 +179,9 @@ def simulate_drift() -> dict[str, Any]:
                 "version": update.new_version,
                 "status": "CURRENT",
                 "architecture": update.current_architecture,
+                "legacy_exceptions": [
+                    exception.model_dump() for exception in update.preserved_legacy_exceptions
+                ],
                 "workflow": [step.model_dump() for step in update.workflow],
                 "jcasc_patch": update.jcasc_patch,
             },

@@ -41,6 +41,13 @@ def publish_temporal_skill(
     (package_dir / "deprecated-actions.json").write_text(
         json.dumps(skill.deprecated_actions, indent=2), encoding="utf-8"
     )
+    (package_dir / "legacy-exceptions.json").write_text(
+        json.dumps(
+            [exception.model_dump(mode="json") for exception in skill.legacy_exceptions],
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     (package_dir / "jcasc-patch.yaml").write_text(incident.jcasc_patch, encoding="utf-8")
     (package_dir / "eval-report.json").write_text(
         report.model_dump_json(indent=2), encoding="utf-8"
@@ -48,7 +55,9 @@ def publish_temporal_skill(
     (package_dir / "README.md").write_text(
         "# Jenkins Current Recovery v4\n\n"
         "Generated from 200 historical tickets across four architecture eras.\n\n"
-        "This skill rejects VM, systemctl, direct Helm, and persistent kubectl advice.\n"
+        "This skill rejects VM, systemctl, direct Helm, and persistent kubectl advice by default.\n"
+        "The only VM-era exceptions are jenkins-paris, jenkins-barcelona, and jenkins-NYC; "
+        "their scoped SSH/systemctl runbook is allowed only on exact target match.\n"
         "The current workflow uses JCasC, Git pull requests, Argo CD, ephemeral GKE agents, "
         "and Workload Identity.\n",
         encoding="utf-8",
