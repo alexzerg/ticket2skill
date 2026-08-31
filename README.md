@@ -29,7 +29,7 @@ The published version is also stored in a Firestore Agent Registry and can immed
 4. Replay Critic generates `v2` from the failure evidence.
 5. The same held-out regression gate improves from **50% to 100%**.
 6. Registry Publisher writes the proven skill to Firestore and creates the ZIP package.
-7. The published skill handles a new contractor ticket and correctly escalates it before credential mutation.
+7. The published skill processes a fresh queue: it auto-resolves a standard employee case, creates an approval request for a contractor, and denies a terminated identity before credential mutation.
 
 ## Why it is different
 

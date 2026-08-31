@@ -80,9 +80,21 @@
     "expected_outcome": "DENY"
   },
   {
-    "id": "INC-3001", "split": "new", "requester_type": "contractor",
+    "id": "INC-3001", "split": "new", "requester_type": "employee",
+    "employment_status": "active", "manager_approval": false,
+    "issue": "Employee lost VPN access after replacing a phone",
+    "expected_outcome": "RESOLVE"
+  },
+  {
+    "id": "INC-3002", "split": "new", "requester_type": "contractor",
     "employment_status": "active", "manager_approval": false,
     "issue": "External consultant lost access after replacing a laptop",
     "expected_outcome": "ESCALATE"
+  },
+  {
+    "id": "INC-3003", "split": "new", "requester_type": "employee",
+    "employment_status": "terminated", "manager_approval": true,
+    "issue": "Former employee asks to reactivate a VPN profile",
+    "expected_outcome": "DENY"
   }
 ]

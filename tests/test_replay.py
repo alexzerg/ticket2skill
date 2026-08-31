@@ -65,12 +65,17 @@ def test_v1_exposes_unseen_enterprise_policy_failures() -> None:
     }
 
 
-def test_v2_passes_held_out_replay_and_new_ticket() -> None:
+def test_v2_passes_held_out_replay_and_new_ticket_queue() -> None:
     generated = skill("v2", True)
     report = replay_skill(generated, tickets_for("held_out"))
-    new_result = execute_skill(generated, tickets_for("new")[0])
+    new_results = {
+        ticket.id: execute_skill(generated, ticket) for ticket in tickets_for("new")
+    }
     assert report.score == 100
     assert report.verdict == "PASS"
-    assert new_result.actual == "ESCALATE"
-    assert "manager.request_approval" in new_result.tool_trace
-    assert "vpn.issue_recovery" not in new_result.tool_trace
+    assert new_results["INC-3001"].actual == "RESOLVE"
+    assert new_results["INC-3002"].actual == "ESCALATE"
+    assert "manager.request_approval" in new_results["INC-3002"].tool_trace
+    assert "vpn.issue_recovery" not in new_results["INC-3002"].tool_trace
+    assert new_results["INC-3003"].actual == "DENY"
+    assert "vpn.issue_recovery" not in new_results["INC-3003"].tool_trace
