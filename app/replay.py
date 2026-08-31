@@ -1,5 +1,7 @@
 """Deterministic replay runtime for generated skills."""
 
+from typing import Literal
+
 from app.models import ReplayCase, ReplayReport, SkillSpec, Ticket
 
 
@@ -17,6 +19,7 @@ def execute_skill(skill: SkillSpec, ticket: Ticket) -> ReplayCase:
     deny_policy = _policy_text(skill, "DENY")
     escalate_policy = _policy_text(skill, "ESCALATE")
     trace = ["identity.lookup", "employment.verify"]
+    actual: Literal["RESOLVE", "ESCALATE", "DENY"]
 
     if ticket.employment_status == "terminated" and "terminated" in deny_policy:
         actual = "DENY"
