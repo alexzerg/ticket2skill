@@ -167,3 +167,28 @@ Deploy:
 ```bash
 make deploy
 ```
+
+## Reproducible testing
+
+Use Python 3.12 and Google Cloud Application Default Credentials for the full agent flow.
+The deterministic local quality gate does not call external services:
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/ruff check .
+.venv/bin/mypy app
+.venv/bin/pytest -q
+```
+
+Expected result:
+
+```text
+All checks passed!
+Success: no issues found
+11 passed
+```
+
+To reproduce the hosted workflow, open the live demo and run: Check & Load Tickets → Analyze Ticket
+Timeline → Build Current Skill v4 → Simulate New Architecture Event. Both the initial skill replay
+and the complete v5 replay must reach 100%.
