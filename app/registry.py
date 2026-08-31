@@ -2,12 +2,12 @@
 
 import json
 import os
+import zipfile
 from pathlib import Path
 from uuid import uuid4
-import zipfile
 
-from google.cloud import firestore
 import yaml
+from google.cloud import firestore
 
 from app.models import PublishedSkill, ReplayReport, SkillSpec
 
