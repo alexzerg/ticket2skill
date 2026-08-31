@@ -14,7 +14,7 @@ from app.models import PublishedSkill, ReplayReport, SkillSpec
 from app.registry import artifact_path, publish_skill
 from app.replay import execute_skill, replay_skill
 
-app = FastAPI(title="Ticket2Skill", version="0.1.0")
+app = FastAPI(title="Ticket2Skill", version="0.2.0")
 state_lock = Lock()
 state: dict[str, Any] = {
     "skill_v1": None,
